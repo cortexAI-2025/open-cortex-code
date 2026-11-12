@@ -1,0 +1,61 @@
+{
+  "name": "open-cortex-coder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Environnement agentique local basé sur OpenCode",
+  "type": "module",
+  "homepage": "https://github.com/cortexAI-2025/open-cortex-code",
+  "author": "Open Cortex Coder contributors",
+  "license": "MIT",
+  "packageManager": "pnpm@11.25.0",
+  "engines": { "node": ">=22.16.0 <23 || >=24.0.0" },
+  "main": "dist-desktop/main.js",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 3000 --strictPort",
+    "dev:local": "tsx server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build:web": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:desktop": "tsc -p tsconfig.desktop.json",
+    "build": "pnpm build:web && pnpm build:server && pnpm build:desktop",
+    "start": "node dist-server/server/index.js",
+    "desktop": "electron .",
+    "test": "vitest run",
+    "test:engine": "tsx scripts/test-engine.ts",
+    "test:connector": "tsx scripts/test-connector.ts",
+    "package:desktop": "pnpm build && electron-builder --linux zip deb --publish never",
+    "package:source": "python3 scripts/package-source.py"
+  },
+  "dependencies": {
+    "@opencode/cli": "2.2.7",
+    "@opencode/client": "2.2.7",
+    "express": "5.3.0",
+    "zod": "4.6.7",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "lucide-react": "1.72.0",
+    "@monaco-editor/react": "4.7.0",
+    "monaco-editor": "0.57.0"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vitest": "5.1.0",
+    "tsx": "4.23.15",
+    "electron": "45.3.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "org.opencortex.coder",
+    "productName": "Open Cortex Coder",
+    "directories": { "output": "release" },
+    "publish": null,
+    "files": ["dist-desktop/**", "dist-server/**", "dist/**", "package.json"],
+    "asarUnpack": ["node_modules/@opencode/cli*/**"],
+    "linux": { "target": ["zip", "deb"], "category": "Development", "executableName": "open-cortex-coder", "maintainer": "Open Cortex Coder", "syncDesktopName": true }
+  }
+}

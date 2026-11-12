@@ -1,0 +1,11 @@
+.file-checkpoints{position:absolute;z-index:5;right:12px;top:94px;bottom:12px;width:min(560px,60%);overflow:auto;padding:15px;background:var(--surface);border:1px solid var(--accent);border-radius:5px;box-shadow:0 8px 30px var(--shadow)}
+.file-checkpoints>header,.file-checkpoints article{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.file-checkpoints>header{align-items:center;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px}
+.file-checkpoints>header strong{display:flex;align-items:center;gap:7px;font-size:11px}
+.file-checkpoints article{padding:12px 0;border-bottom:1px solid var(--border)}
+.file-checkpoints article>div{min-width:0;flex:1}
+.file-checkpoints article strong,.file-checkpoints article small{display:block}
+.file-checkpoints article strong{font-size:10px}
+.file-checkpoints article small{font-size:9px;margin:4px 0}
+.file-checkpoints article pre{max-height:150px;overflow:auto;margin:6px 0 0;padding:8px;background:var(--input);border:1px solid var(--border);font-size:9px}
+.file-checkpoints article>.secondary{flex-shrink:0;font-size:9px;padding:6px}

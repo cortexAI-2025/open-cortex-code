@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-server/
+dist-desktop/
+release/
+.env
+.env.*
+!.env.example
+.cortex/
+*.db
+*.db-shm
+*.db-wal
+coverage/
+artifacts/
+*.log
+server/advanced/*-results.txt
