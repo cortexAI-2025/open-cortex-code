@@ -5,7 +5,7 @@ import { PRODUCT_NAME } from '../config';
 export function Brand({ compact = false }: {
     compact?: boolean;
 }) {
-    return <div className="brand"><img src="/logo.svg" width="32" height="32" alt=""/>{!compact && <div><strong>{PRODUCT_NAME.replace(/\s+Coder$/i, '').toUpperCase()}</strong><span>CODER / LOCAL FIRST</span></div>}</div>;
+    return <div className="brand"><img src="logo.svg" width="32" height="32" alt=""/>{!compact && <div><strong>{PRODUCT_NAME.replace(/\s+Coder$/i, '').toUpperCase()}</strong><span>CODER / LOCAL FIRST</span></div>}</div>;
 }
 export function SectionHeading({ index, title, detail, action }: {
     index: string;
