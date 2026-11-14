@@ -66,3 +66,8 @@ Les chunks restent volumineux dans la sortie de build, notamment `ts.worker` (6 
 - `git diff --check` — propre avant préparation du commit local.
 
 Aucune fusion, aucun push et aucun déploiement n'ont été effectués.
+
+
+## État de livraison — 14 novembre 2026
+
+La mention précédente indiquant qu'aucun push, aucune fusion et aucun déploiement n'avaient été effectués décrivait l'état au moment de la validation locale initiale du 13 novembre. Le 14 novembre, après validation spécifique, la [PR brouillon Monaco-only #1](https://github.com/cortexAI-2025/open-cortex-code/pull/1) a été ouverte vers la branche `main`. Elle reste non fusionnée; aucun déploiement n'a été effectué.
