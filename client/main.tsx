@@ -1,5 +1,4 @@
 import { createRoot } from 'react-dom/client';
-import './monaco';
 import './styles.css';
 import './responsive.css';
 import App from './App';
