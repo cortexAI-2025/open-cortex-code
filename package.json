@@ -15,12 +15,14 @@
     "dev:local": "tsx server/index.ts",
     "typecheck": "tsc --noEmit",
     "build:web": "vite build",
+    "analyze:bundle": "vite build --mode analyze",
     "build:server": "tsc -p tsconfig.server.json",
     "build:desktop": "tsc -p tsconfig.desktop.json",
     "build": "pnpm build:web && pnpm build:server && pnpm build:desktop",
     "start": "node dist-server/server/index.js",
     "desktop": "electron .",
     "test": "vitest run",
+    "test:monaco-browser": "node scripts/test-monaco-browser.mjs",
     "test:engine": "tsx scripts/test-engine.ts",
     "test:connector": "tsx scripts/test-connector.ts",
     "package:desktop": "pnpm build && electron-builder --linux zip deb --publish never",
@@ -47,7 +49,8 @@
     "vitest": "5.1.0",
     "tsx": "4.23.15",
     "electron": "45.3.0",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "rollup-plugin-visualizer": "^7.1.3"
   },
   "build": {
     "appId": "org.opencortex.coder",

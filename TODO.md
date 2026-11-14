@@ -605,3 +605,69 @@ Livrables attendus : code local, tests de sécurité, documentation d'installati
 Aucune publication Manus, aucun déploiement cloud et aucune mise en production sans autorisation explicite. Critères ouverts jusqu'à preuve de chaque résultat réel.
 
 **État partiel (12 novembre 2026)** : connecteur local `127.0.0.1`, demandes distantes fermées par défaut et fenêtre de cinq minutes activée seulement localement, pairing à origine HTTPS exacte, approbation/refus local, token temporaire révocable, préflight CORS/PNA strict, refus Host/Origin hostile, protection des secrets et plafonds de fréquence/capacité sont implémentés. Tests de contrat Node/HTTP réussis. Parcours E2E réel HTTPS→loopback réussi sous Chromium 156.0.8078.73 et Firefox 160.0 sur Ubuntu 24.04.5 ARM64 : prompt LNA affiché/accepté, approbation locale, association UI et révocation/déconnexion réussies; permissions de profils temporaires non mémorisées. Statuts détaillés `OPTIONS 204`, `POST 202`, `GET 200`, `GET /api/bootstrap 200` observés sous Chromium seulement. Limites encore ouvertes : refus LNA, autres versions/OS, Safari, Android/WebView, CSP/Permissions-Policy d'autres hébergeurs et tests multi-appareils. L'interface statique est publiée séparément sur GitHub Pages avec autorisation; le connecteur reste local et aucun déploiement backend Manus n'a été effectué. Critères de compatibilité généraux ouverts jusqu'à élargissement des preuves.
+
+## [x] 29. OPTIMISATION DU CHARGEMENT MONACO — 13 NOVEMBRE 2026
+
+Objectif : réduire significativement le JavaScript chargé au démarrage, sans supprimer ni dégrader les fonctionnalités de Monaco Editor.
+
+### Phase 1 — Lazy loading
+
+- Examiner les imports actuels de Monaco et Workbench.
+- Implémenter `React.lazy()` et `Suspense`.
+- Monter Workbench uniquement lorsque l'éditeur est ouvert.
+- Vérifier qu'aucun import statique indirect ne réintègre Monaco dans le bundle initial.
+- Prévoir un indicateur de chargement léger.
+- Préserver l'état de l'éditeur lors des changements de vue lorsque nécessaire.
+
+### Phase 2 — Workers
+
+- Auditer la configuration des workers Monaco.
+- Charger uniquement les workers nécessaires aux langages utilisés, lorsque l'architecture le permet.
+- Préserver TypeScript, JavaScript, CSS, HTML et JSON.
+- Vérifier les diagnostics et l'autocomplétion après optimisation.
+
+### Phase 3 — Mesures
+
+Exécuter :
+
+- `pnpm analyze:bundle`
+- `pnpm build`
+- `pnpm typecheck`
+- `pnpm test`
+
+Comparer avant/après :
+
+- Taille du bundle d'entrée, brut et gzip.
+- Taille totale des fichiers JavaScript émis.
+- Nombre et taille des chunks.
+- Chargement initial réel.
+- Chargement lors de la première ouverture de Monaco.
+- Absence de régression fonctionnelle.
+
+Ne pas présenter une réduction du bundle initial comme une réduction équivalente du téléchargement total.
+
+### Phase 4 — Livraison
+
+- Préparer les modifications sur une branche dédiée.
+- Fournir les résultats mesurés avant/après.
+- Vérifier les tests.
+- Ne pas fusionner ni déployer sans validation.
+
+Ne pas remplacer Monaco, React DOM ou Lucide à cette étape.
+
+
+### Finalisation demandée le 13 novembre 2026
+
+Avant tout commit :
+
+1. Vérifier précisément les changements de la branche et séparer les modifications Monaco des travaux antérieurs de pairing.
+2. Vérifier qu'aucun état de l'éditeur n'est perdu lors des changements de vue.
+3. Ajouter un test automatisé reproductible du chargement différé de Monaco, sans dépendre d'une fixture temporaire.
+4. Vérifier le comportement en cas d'échec du chargement dynamique et prévoir une interface de reprise.
+5. Contrôler les performances de première ouverture de l'éditeur et les éventuelles requêtes réseau supplémentaires.
+6. Conserver Monaco, React DOM, Lucide et les workers existants.
+7. Relancer build, typecheck et les 86 tests existants, ainsi que les nouveaux tests.
+
+Ensuite, préparer un commit local limité à cette optimisation et fournir son SHA.
+
+Ne pas pousser, fusionner ou déployer sans nouvelle validation.
