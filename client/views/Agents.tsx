@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { GitFork, Play } from 'lucide-react';
 import type { AgentMode, CortexSession } from '../../shared/contracts';
 import { dateLabel, projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useBootstrap, useWorkspace, useAgent, useNavigationActions, useAppActions } from '../state';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
 interface ParallelAgent {
     id: string;
@@ -21,7 +21,12 @@ interface ParallelAgent {
     warning: string;
 }
 export function Agents() {
-    const { api, projectId, project, profileId, bootstrap, act, confirm, refresh, setProjectId, setSession, setProfileId, setMode, setView } = useApp();
+    const { api, refresh } = useConnection();
+    const { bootstrap } = useBootstrap();
+    const { projectId, project, setProjectId } = useWorkspace();
+    const { profileId, setSession, setProfileId, setMode } = useAgent();
+    const { setView } = useNavigationActions();
+    const { act, confirm } = useAppActions();
     const agents = useResource<ParallelAgent[]>(api, projectId ? projectRoute(projectId, 'agents') : null, 6000);
     const [name, setName] = useState('');
     const [task, setTask] = useState('');

@@ -4,7 +4,7 @@ import MonacoEditor from '@monaco-editor/react';
 import { Code2, Save, X, FileCode2, History, RotateCcw } from 'lucide-react';
 import type { FileContent } from '../../shared/contracts';
 import { projectRoute } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace, useUnsavedActions, useNavigationActions, useAppActions } from '../state';
 import { FileTree } from './FileTree';
 import { Empty, Loading } from './ui';
 interface Tab extends FileContent {
@@ -14,7 +14,11 @@ interface FileCheckpoint { id: string; path: string; content: string; hash: stri
 export function Workbench({ theme }: {
     theme: string;
 }) {
-    const { api, project, projectId, act, confirm, setView, setUnsaved } = useApp();
+    const { api } = useConnection();
+    const { project, projectId } = useWorkspace();
+    const { setUnsaved } = useUnsavedActions();
+    const { setView } = useNavigationActions();
+    const { act, confirm } = useAppActions();
     const [tabs, setTabs] = useState<Tab[]>([]);
     const [active, setActive] = useState('');
     const [busy, setBusy] = useState(false);

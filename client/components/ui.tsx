@@ -1,6 +1,6 @@
 import { RefreshCw, AlertCircle, ChevronRight, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useApp } from '../state';
+import { useConnection, useWorkspace, useNavigationActions } from '../state';
 import { PRODUCT_NAME } from '../config';
 export function Brand({ compact = false }: {
     compact?: boolean;
@@ -34,7 +34,9 @@ export function Loading() { return <div className="loading"><LoaderCircle classN
 export function ProjectGate({ children }: {
     children: ReactNode;
 }) {
-    const { connected, project, setView } = useApp();
+    const { connected } = useConnection();
+    const { project } = useWorkspace();
+    const { setView } = useNavigationActions();
     if (!connected)
         return <Empty title="Un moteur local est nécessaire" detail="Cette vue utilise vos données réelles. Associez votre connecteur pour continuer."><button className="primary" onClick={() => setView('settings')}>Associer le connecteur</button></Empty>;
     if (!project)

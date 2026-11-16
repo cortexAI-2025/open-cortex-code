@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Cable, ShieldCheck, Unplug, Check, X, RefreshCw } from 'lucide-react';
-import { useApp } from '../state';
+import { useConnection, useConnecting, useUnsaved, useAppActions } from '../state';
 import { isLoopback, type LocalApi } from '../api';
 import { Field } from './ui';
 import '../pairing.css';
@@ -15,7 +15,7 @@ interface PairingRequest {
 interface PairingControl { enabled: boolean; enabledUntil: string | null }
 
 function LocalPairings({ api }: { api: LocalApi }) {
-    const { confirm, act } = useApp();
+    const { confirm, act } = useAppActions();
     const [rows, setRows] = useState<PairingRequest[]>([]);
     const [control, setControl] = useState<PairingControl>({ enabled: false, enabledUntil: null });
     const [error, setError] = useState('');
@@ -126,7 +126,10 @@ function HostedPairing({ connect, connecting }: { connect: (url: string, token: 
 }
 
 export function ConnectionPanel() {
-    const { api, connected, connecting, connect, disconnect, confirm, unsaved, notify } = useApp();
+    const { api, connected, connect, disconnect } = useConnection();
+    const connecting = useConnecting();
+    const unsaved = useUnsaved();
+    const { confirm, notify } = useAppActions();
     const [url, setUrl] = useState('http://127.0.0.1:4000');
     const [token, setToken] = useState('');
     const [consent, setConsent] = useState(false);

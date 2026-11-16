@@ -1,8 +1,11 @@
 import { ArrowUpRight, FolderOpen, KeyRound, Shield, Terminal, Cable } from 'lucide-react';
-import { useApp } from '../state';
+import { useConnection, useBootstrap, useWorkspace, useNavigationActions } from '../state';
 import { ConnectionPanel } from '../components/ConnectionPanel';
 export function Dashboard() {
-    const { connected, bootstrap, project, setView } = useApp();
+    const { connected } = useConnection();
+    const { bootstrap } = useBootstrap();
+    const { project } = useWorkspace();
+    const { setView } = useNavigationActions();
     return <div className="dashboard page-scroll">
     <div className="hero-top"><span className="eyebrow">OPEN SOURCE · LOCAL FIRST · BYOK</span><span className="edition">ATELIER / 0.1</span></div>
     <section className="hero"><div className="hero-line"/><p className="hero-kicker">LA PROGRAMMATION, SOUS VOTRE CONTRÔLE.</p><h1>Votre code.<br />Votre moteur.<br /><em>Vos règles.</em></h1><p className="hero-description">Un espace pour explorer, construire et vérifier.<br />OpenCode exécute. Vous choisissez le modèle<br className="desktop-break"/> et autorisez chaque action sensible.</p>
