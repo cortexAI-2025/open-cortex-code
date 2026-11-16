@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, ShieldCheck, FlaskConical, Trash2 } from 'lucide-react';
 import type { Profile } from '../../shared/contracts';
-import { useApp } from '../state';
+import { useConnection, useBootstrap, useWorkspace, useAgent, useNavigationActions, useAppActions } from '../state';
 import { projectRoute, useResource } from '../api';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
 export interface CatalogModel {
@@ -20,7 +20,12 @@ export interface Catalog {
     }[];
 }
 export function Models() {
-    const { api, connected, remote, projectId, bootstrap, profileId, setProfileId, act, refresh, confirm, setView, notify } = useApp();
+    const { api, connected, remote, refresh } = useConnection();
+    const { bootstrap } = useBootstrap();
+    const { projectId } = useWorkspace();
+    const { profileId, setProfileId } = useAgent();
+    const { setView } = useNavigationActions();
+    const { act, confirm, notify } = useAppActions();
     const catalog = useResource<Catalog>(api, projectId ? projectRoute(projectId, 'models') : null);
     const [name, setName] = useState('');
     const [providerId, setProvider] = useState('');

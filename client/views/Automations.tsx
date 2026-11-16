@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { CalendarClock, Play, Plus, Trash2 } from 'lucide-react';
 import type { AgentMode, Automation, CortexSession } from '../../shared/contracts';
 import { dateLabel, projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useBootstrap, useWorkspace, useAgent, useNavigationActions, useAppActions } from '../state';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
 interface LocalAutomation extends Automation {
     dayOfWeek?: number;
@@ -11,7 +11,12 @@ interface LocalAutomation extends Automation {
     lastSessionId?: string;
 }
 export function Automations() {
-    const { api, projectId, bootstrap, profileId, act, confirm, setSession, setView } = useApp();
+    const { api } = useConnection();
+    const { bootstrap } = useBootstrap();
+    const { projectId } = useWorkspace();
+    const { profileId, setSession } = useAgent();
+    const { setView } = useNavigationActions();
+    const { act, confirm } = useAppActions();
     const records = useResource<LocalAutomation[]>(api, projectId ? projectRoute(projectId, 'automations') : null, 10000);
     const [editing, setEditing] = useState<LocalAutomation | null>(null);
     const [name, setName] = useState('');

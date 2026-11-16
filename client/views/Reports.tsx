@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { RefreshCw, Download } from 'lucide-react';
 import type { HistoryEvent } from '../../shared/contracts';
 import { dateLabel, projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace } from '../state';
 import { Empty, ErrorBox, JsonResult, Loading, SectionHeading } from '../components/ui';
 import { DeliveryDocument, type DeliveryReport } from './DeliveryDocument';
 export function Reports({ delivery = false }: {
     delivery?: boolean;
 }) {
-    const { api, projectId, project } = useApp();
+    const { api } = useConnection();
+    const { projectId, project } = useWorkspace();
     const [filter, setFilter] = useState('');
     const history = useResource<HistoryEvent[]>(api, projectId && !delivery ? projectRoute(projectId, 'history') : null, 10000);
     const report = useResource<DeliveryReport>(api, projectId && delivery ? projectRoute(projectId, 'delivery') : null);

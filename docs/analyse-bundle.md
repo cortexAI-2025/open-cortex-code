@@ -31,3 +31,8 @@ Le smoke test antérieur des workers a utilisé des modèles temporaires en mém
 ### Limites du build
 
 La sortie garde des chunks volumineux : `ts.worker` (6 927 851 o bruts, 1 483 002 o gzip estimés), `editor.api` (2 735 533 o bruts, 695 751 o gzip estimés) et `css.worker` (1 078 350 o bruts, 244 745 o gzip estimés). Ces ressources demeurent émises et peuvent être demandées lorsqu'un fichier correspondant est ouvert; elles sont séparées du chargement initial. L'avertissement Vite n'a pas été masqué en augmentant le seuil.
+
+
+## Chargement différé des vues et panneaux secondaires
+
+Les vues Integrations, Models, Automations, Skills, Memory et Settings utilisent `React.lazy()`, comme les panneaux CommandPanel et GitPanel du tiroir. Le rapport des mesures avant/après, les limites du test ProjectGate et les avertissements restants sont consignés dans [l’analyse des vues secondaires](optimisation-vues-secondaires.md). Après `pnpm build`, `pnpm test:secondary-views-browser` vérifie les chunks, le chargement réel de Models et Settings, et l’absence des panneaux du tiroir au chargement à froid; pour ouvrir ces panneaux dans un navigateur, un connecteur local et un projet réel sont nécessaires.

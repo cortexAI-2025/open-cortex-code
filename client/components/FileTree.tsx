@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { ChevronRight, ChevronDown, FileCode2, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import type { FileNode } from '../../shared/contracts';
 import { projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace } from '../state';
 import { Empty, ErrorBox, Loading } from './ui';
 export function FileTree({ onOpen, selected }: {
     onOpen: (path: string) => void;
     selected: string;
 }) {
-    const { project } = useApp();
+    const { project } = useWorkspace();
     return <aside className="file-explorer"><header><span>EXPLORATEUR</span><span className="badge">LOCAL</span></header>{project ? <><div className="tree-project"><FolderOpen size={16}/><strong>{project.name}</strong></div><Directory path="" depth={0} onOpen={onOpen} selected={selected}/></> : <Empty title="Aucun dossier ouvert" detail="Le connecteur n’a encore transmis aucun fichier."/>}</aside>;
 }
 function Directory({ path, depth, onOpen, selected }: {
@@ -17,7 +17,8 @@ function Directory({ path, depth, onOpen, selected }: {
     onOpen: (path: string) => void;
     selected: string;
 }) {
-    const { api, projectId } = useApp();
+    const { api } = useConnection();
+    const { projectId } = useWorkspace();
     const files = useResource<FileNode[]>(api, projectId ? `${projectRoute(projectId, 'files')}?path=${encodeURIComponent(path)}` : null);
     return <div className="tree-directory"><ErrorBox error={files.error} retry={files.refresh}/>{files.loading && <Loading />}{files.data?.map(node => <TreeNode key={node.path} node={node} depth={depth} onOpen={onOpen} selected={selected}/>)}{files.data?.length === 0 && <small className="tree-empty">Dossier vide</small>}{depth === 0 && <button className="tree-refresh" onClick={files.refresh}><RefreshCw size={12}/>Actualiser les fichiers</button>}</div>;
 }

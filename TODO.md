@@ -671,3 +671,14 @@ Avant tout commit :
 Ensuite, préparer un commit local limité à cette optimisation et fournir son SHA.
 
 Ne pas pousser, fusionner ou déployer sans nouvelle validation.
+
+## [x] 30. CHARGEMENT DIFFÉRÉ DES VUES SECONDAIRES
+Implémenter `React.lazy()` pour les vues **Integrations**, **Models**, **Automations**, **Skills** et **Memory**. Mesurer avant/après le bundle initial, notamment les tailles brutes et gzip, et distinguer ce gain de l’évolution de la taille totale des fichiers JavaScript émis.
+
+
+## [x] 31. CHARGEMENT DIFFÉRÉ DE SETTINGS ET DES PANNEAUX DU TIROIR
+Utiliser `React.lazy()` pour charger la vue **Settings** à l’ouverture de cette vue et charger **CommandPanel** ainsi que **GitPanel** à la demande lorsqu’ils sont affichés dans le tiroir. Préserver les fonctionnalités existantes et mesurer avant/après l’impact sur le JavaScript chargé à froid; distinguer le poids du bundle d’entrée de la taille totale JavaScript émise.
+
+
+## [x] 32. SÉPARATION DES CONTEXTES GLOBAUX
+Séparer les domaines globaux **connexion**, **navigation**, **agent** et **notifications** afin d’éviter les rerendus inutiles. Mettre à jour les consommateurs pour qu’ils s’abonnent uniquement aux domaines dont ils ont besoin, stabiliser les valeurs de contexte qui ne changent pas et préserver les comportements existants.

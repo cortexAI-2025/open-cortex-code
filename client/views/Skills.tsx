@@ -2,10 +2,14 @@ import { useState } from 'react';
 import { WandSparkles, Plus, Download, Trash2 } from 'lucide-react';
 import type { CortexSession, FileContent, Skill } from '../../shared/contracts';
 import { RequestError, projectRoute, sha256, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace, useAgent, useNavigationActions, useAppActions } from '../state';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
 export function Skills() {
-    const { api, projectId, profileId, act, confirm, setSession, setView } = useApp();
+    const { api } = useConnection();
+    const { projectId } = useWorkspace();
+    const { profileId, setSession } = useAgent();
+    const { setView } = useNavigationActions();
+    const { act, confirm } = useAppActions();
     const skills = useResource<Skill[]>(api, projectId ? projectRoute(projectId, 'skills') : null);
     const [selected, setSelected] = useState<Skill | null>(null);
     const [name, setName] = useState('');

@@ -1,18 +1,30 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState, type ComponentType } from 'react';
 import { Terminal, FlaskConical, GitBranch, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
-import { useApp } from '../state';
+import { useAppActions } from '../state';
 import { isLoopback } from '../api';
-import { CommandPanel } from './CommandPanel';
-import { GitPanel } from './GitPanel';
 import { Empty, ProjectGate } from './ui';
+type LazyPanelModule<P extends object> = { default: ComponentType<P> };
+function lazyPanel<P extends object = {}>(importPanel: () => Promise<LazyPanelModule<P>>, label: string) {
+    return lazy(async (): Promise<LazyPanelModule<P>> => {
+        try {
+            return await importPanel();
+        }
+        catch {
+            const LoadFailure: ComponentType<P> = () => <div className="loading editor-lazy-error" role="alert" aria-live="assertive"><span>Impossible de charger le panneau « {label} ».</span><button className="secondary" type="button" onClick={() => window.location.reload()}>Recharger l’application</button></div>;
+            return { default: LoadFailure };
+        }
+    });
+}
+const CommandPanel = lazyPanel(() => import('./CommandPanel').then(({ CommandPanel }) => ({ default: CommandPanel })), 'Commandes');
+const GitPanel = lazyPanel(() => import('./GitPanel').then(({ GitPanel }) => ({ default: GitPanel })), 'Git & diff');
 export function Tray() {
     const [open, setOpen] = useState(false);
     const [tab, setTab] = useState<'commands' | 'tests' | 'git' | 'preview'>('commands');
     const items = [{ id: 'commands', title: 'Commandes', icon: Terminal }, { id: 'tests', title: 'Tests', icon: FlaskConical }, { id: 'git', title: 'Git & diff', icon: GitBranch }, { id: 'preview', title: 'Preview', icon: ExternalLink }] as const;
-    return <section className={`bottom-tray ${open ? 'open' : ''}`} aria-label="Commandes et résultats"><header className="tray-tabs"><div>{items.map(item => <button key={item.id} className={open && tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); setOpen(true); }}><item.icon size={14}/>{item.title}</button>)}</div><button className="icon-button" aria-label={open ? 'Fermer le tiroir' : 'Ouvrir le tiroir'} title={open ? 'Fermer le tiroir' : 'Ouvrir le tiroir'} onClick={() => setOpen(!open)}>{open ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}</button></header>{open && <div className="tray-body"><ProjectGate>{tab === 'commands' ? <CommandPanel /> : tab === 'tests' ? <CommandPanel tests/> : tab === 'git' ? <GitPanel /> : <Preview />}</ProjectGate></div>}</section>;
+    return <section className={`bottom-tray ${open ? 'open' : ''}`} aria-label="Commandes et résultats"><header className="tray-tabs"><div>{items.map(item => <button key={item.id} className={open && tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); setOpen(true); }}><item.icon size={14}/>{item.title}</button>)}</div><button className="icon-button" aria-label={open ? 'Fermer le tiroir' : 'Ouvrir le tiroir'} title={open ? 'Fermer le tiroir' : 'Ouvrir le tiroir'} onClick={() => setOpen(!open)}>{open ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}</button></header>{open && <div className="tray-body"><ProjectGate><Suspense fallback={<div className="loading" role="status" aria-live="polite">Chargement du panneau…</div>}>{tab === 'commands' ? <CommandPanel /> : tab === 'tests' ? <CommandPanel tests/> : tab === 'git' ? <GitPanel /> : <Preview />}</Suspense></ProjectGate></div>}</section>;
 }
 function Preview() {
-    const { confirm, act } = useApp();
+    const { confirm, act } = useAppActions();
     const [url, setUrl] = useState('');
     return <div className="preview-panel"><Empty title="Aperçu externe, explicitement autorisé" detail="L’application ne lance pas de serveur caché. Démarrez votre application dans un environnement approprié, puis ouvrez son URL loopback dans une fenêtre séparée."/><form className="inline-form" onSubmit={async (e) => { e.preventDefault(); await act(async () => { const target = new URL(url); if (!['http:', 'https:'].includes(target.protocol) || !isLoopback(target.hostname) || target.username || target.password)
         throw new Error('Seules les URL HTTP(S) loopback sans identifiants sont autorisées ici.'); if (!await confirm('Ouvrir cet aperçu local ?', `${target.origin} sera ouvert dans une fenêtre séparée, sans privilèges Desktop ni accès au jeton Cortex. Vérifiez que le serveur correspond à votre projet autorisé.`))

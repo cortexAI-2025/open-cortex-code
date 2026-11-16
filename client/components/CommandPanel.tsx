@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Play, Terminal, CheckCircle2, XCircle } from 'lucide-react';
 import type { CommandResult } from '../../shared/contracts';
 import { dateLabel, projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace, useAppActions } from '../state';
 import { Empty, ErrorBox, Loading } from './ui';
 interface StoredCommand extends CommandResult {
     kind: 'command' | 'test';
@@ -13,7 +13,9 @@ interface StoredCommand extends CommandResult {
 export function CommandPanel({ tests = false }: {
     tests?: boolean;
 }) {
-    const { api, project, projectId, act, confirm } = useApp();
+    const { api } = useConnection();
+    const { project, projectId } = useWorkspace();
+    const { act, confirm } = useAppActions();
     const [command, setCommand] = useState('');
     const [busy, setBusy] = useState(false);
     const results = useResource<StoredCommand[]>(api, projectId ? projectRoute(projectId, 'commands') : null);
