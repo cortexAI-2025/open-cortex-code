@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { GitBranch, Archive, RotateCcw, RefreshCw } from 'lucide-react';
 import { RequestError, dateLabel, projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace, useUnsaved, useAgent, useNavigationActions, useAppActions } from '../state';
 import { Empty, ErrorBox, Loading } from './ui';
 interface GitState {
     available: boolean;
@@ -30,7 +30,12 @@ interface RestorePreview {
     hashes: Record<string, string | null>;
 }
 export function GitPanel() {
-    const { api, projectId, profileId, act, confirm, setSession, setView, unsaved } = useApp();
+    const { api } = useConnection();
+    const { projectId } = useWorkspace();
+    const unsaved = useUnsaved();
+    const { profileId, setSession } = useAgent();
+    const { setView } = useNavigationActions();
+    const { act, confirm } = useAppActions();
     const [tab, setTab] = useState<'diff' | 'log' | 'checkpoints' | 'github'>('diff');
     const [branch, setBranch] = useState('');
     const [busy, setBusy] = useState(false);

@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { FolderOpen, ArrowUpRight, FolderPlus } from 'lucide-react';
 import type { Project } from '../../shared/contracts';
-import { useApp } from '../state';
+import { useConnection, useBootstrap, useWorkspace, useNavigationActions, useAppActions } from '../state';
 import { dateLabel } from '../api';
 import { Empty, Field, SectionHeading } from '../components/ui';
 export function Projects() {
-    const { api, bootstrap, connected, act, refresh, setProjectId, setView, confirm } = useApp();
+    const { api, connected, refresh } = useConnection();
+    const { bootstrap } = useBootstrap();
+    const { setProjectId } = useWorkspace();
+    const { setView } = useNavigationActions();
+    const { act, confirm } = useAppActions();
     const [name, setName] = useState('');
     const [path, setPath] = useState('');
     const [trusted, setTrusted] = useState(false);
@@ -15,7 +19,7 @@ export function Projects() {
     return <div className="page-scroll management-page"><SectionHeading index="02" title="Vos projets" detail="Des dossiers réels, une mémoire indépendante. Aucun clonage implicite."/>
     <div className="split-management"><section><div className="panel-title"><FolderOpen size={17}/><h3>Dossiers enregistrés</h3><span className="badge">{bootstrap?.projects.length ?? 0}</span></div>
       {!bootstrap?.projects.length && <Empty title="Aucun projet ouvert" detail="Indiquez le chemin absolu d’un dossier existant sur l’appareil du connecteur."/>}
-      <div className="item-list">{bootstrap?.projects.map(project => <button className="project-item" key={project.id} onClick={() => { setProjectId(project.id); setView('editor'); }}><FolderOpen size={20}/><div><strong>{project.name}</strong><code>{project.path}</code><small>{dateLabel(project.updatedAt)} · {project.trusted ? 'Exécution approuvée' : 'Lecture · non approuvé'}</small></div><ArrowUpRight size={16}/></button>)}</div>
+      <div className="item-list">{bootstrap?.projects.map(project => <button className="project-item" key={project.id} onClick={async () => { if (await setProjectId(project.id)) setView('editor'); }}><FolderOpen size={20}/><div><strong>{project.name}</strong><code>{project.path}</code><small>{dateLabel(project.updatedAt)} · {project.trusted ? 'Exécution approuvée' : 'Lecture · non approuvé'}</small></div><ArrowUpRight size={16}/></button>)}</div>
     </section><section className="form-panel"><div className="panel-title"><FolderPlus size={17}/><h3>Ouvrir un dossier</h3></div><form onSubmit={async (e) => {
             e.preventDefault();
             if (!api)
@@ -26,8 +30,8 @@ export function Projects() {
             const result = await act(() => api.request<Project>('/projects', 'POST', { name, path, trusted }), 'Projet ouvert depuis le système de fichiers local.');
             if (result) {
                 await act(refresh);
-                setProjectId(result.id);
-                setView('editor');
+                if (await setProjectId(result.id))
+                    setView('editor');
             }
             setBusy(false);
         }}><Field label="Nom du projet"><input required value={name} onChange={e => setName(e.target.value)} placeholder="Nom de votre atelier"/></Field><Field label="Chemin absolu sur votre appareil"><input required value={path} onChange={e => setPath(e.target.value)} placeholder="/chemin/vers/mon-projet" spellCheck={false}/></Field>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Brain, BookOpen, Search, Upload, Plus, Trash2 } from 'lucide-react';
 import type { KnowledgeDocument, MemoryEntry } from '../../shared/contracts';
 import { dateLabel, projectRoute, useResource } from '../api';
-import { useApp } from '../state';
+import { useConnection, useWorkspace, useAppActions } from '../state';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
 interface Document extends KnowledgeDocument {
     hash?: string;
@@ -14,7 +14,9 @@ interface Passage {
     score: number;
 }
 export function Memory() {
-    const { api, projectId, act, confirm } = useApp();
+    const { api } = useConnection();
+    const { projectId } = useWorkspace();
+    const { act, confirm } = useAppActions();
     const [tab, setTab] = useState<'memory' | 'knowledge'>('memory');
     const [query, setQuery] = useState('');
     const [search, setSearch] = useState('');
