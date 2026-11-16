@@ -6,6 +6,7 @@ import type { SessionInfo, SessionMessageInfo, SessionMessagesResponse, ModelInf
 import type { AgentMode, ChatMessage, CortexSession, HistoryEvent, KnowledgeDocument, MemoryEntry, Profile, Project, ToolAction } from '../shared/contracts.js';
 import { Engine, modePermissions } from './engine.js';
 import { HttpError, isLoopback } from './security.js';
+import { RunnerSupervisor } from './runner.js';
 import { Store } from './store.js';
 import { Vault } from './vault.js';
 
@@ -15,6 +16,7 @@ export interface ConnectorContext {
   store: Store;
   vault: Vault;
   engine: Engine;
+  runner?: RunnerSupervisor;
   project(id: string): Project;
   createSession(projectId: string, input: SessionInput): Promise<CortexSession>;
   prompt(sessionId: string, input: PromptInput): Promise<{ accepted: true }>;
@@ -71,10 +73,12 @@ export function relevantMemory(entries: MemoryEntry[], documents: KnowledgeDocum
 export class CoreContext implements ConnectorContext {
   readonly store: Store;
   readonly vault = new Vault();
+  readonly runner: RunnerSupervisor;
   readonly engine: Engine;
   private readonly operations = new Set<string>();
   constructor(options: { dataDir: string; cliPath?: string }) {
     this.store = new Store(path.join(options.dataDir, 'cortex.sqlite'), (json) => JSON.stringify(this.vault.redactValue(JSON.parse(json) as unknown)));
+    this.runner = new RunnerSupervisor({ dataDir: options.dataDir });
     this.engine = new Engine({ ...options, vault: this.vault, project: (id) => this.project(id), profile: (id) => this.profile(id) });
     // Persisted profiles never imply a surviving memory credential.
     for (const profile of this.store.all<Profile>('profiles')) this.store.put('profiles', { ...profile, hasSecret: false });

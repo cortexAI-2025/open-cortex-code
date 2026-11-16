@@ -1,0 +1,1 @@
+NOT RUN: preflight non valide

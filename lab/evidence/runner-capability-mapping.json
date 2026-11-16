@@ -1,0 +1,8 @@
+{
+  "available": false,
+  "certified": false,
+  "backend": "unavailable",
+  "isolationLevel": "none",
+  "networkModes": [],
+  "reason": "Cartographie UID rootless complète absente (plage subuid >= 65536 requise)."
+}

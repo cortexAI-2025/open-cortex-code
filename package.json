@@ -15,7 +15,7 @@
     "dev:local": "tsx server/index.ts",
     "typecheck": "tsc --noEmit",
     "build:web": "vite build",
-    "build:server": "tsc -p tsconfig.server.json",
+    "build:server": "tsc -p tsconfig.server.json && node scripts/copy-runner-security.mjs",
     "build:desktop": "tsc -p tsconfig.desktop.json",
     "build": "pnpm build:web && pnpm build:server && pnpm build:desktop",
     "start": "node dist-server/server/index.js",

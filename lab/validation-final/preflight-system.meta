@@ -1,0 +1,5 @@
+name=preflight-system
+timestamp=2026-11-15T18:41:20Z
+exit=2
+status=FAIL
+command=/home/ubuntu/open-cortex-code/scripts/runner-preflight.sh 

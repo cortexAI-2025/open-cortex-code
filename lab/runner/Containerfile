@@ -1,0 +1,27 @@
+FROM docker.io/library/node:22.16.0-bookworm-slim
+
+ENV NODE_ENV=production \
+    HOME=/tmp/home \
+    PATH=/opt/opencode/node_modules/.bin:/usr/local/bin:/usr/bin:/bin \
+    CI=1 \
+    NO_COLOR=1
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git ripgrep tini \
+ && npm install --global pnpm@11.25.0 \
+ && rm -rf /var/lib/apt/lists/* /root/.npm
+
+WORKDIR /opt/opencode
+COPY package.json /opt/opencode/package.json
+RUN pnpm add --ignore-scripts --prod @opencode/cli@2.2.7 \
+ && rm -rf /root/.local/share/pnpm/store /root/.cache
+
+COPY probe.sh /usr/local/bin/cortex-runner-probe
+RUN chmod 0555 /usr/local/bin/cortex-runner-probe \
+ && mkdir -p /tmp/home \
+ && chmod 0777 /tmp /tmp/home \
+ && printf '%s\n' '#!/bin/sh' 'exec cortex-runner-probe && exec "$@"' > /usr/local/bin/cortex-runner-entrypoint \
+ && chmod 0555 /usr/local/bin/cortex-runner-entrypoint
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/bin/sh"]

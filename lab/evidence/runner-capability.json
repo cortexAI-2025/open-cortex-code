@@ -1,0 +1,8 @@
+{
+  "available": false,
+  "certified": false,
+  "backend": "unavailable",
+  "isolationLevel": "none",
+  "networkModes": [],
+  "reason": "CORTEX_RUNNER_IMAGE absent : aucune image runner épinglée n’est autorisée."
+}

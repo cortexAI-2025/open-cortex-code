@@ -1,0 +1,8 @@
+{
+  "name": "open-cortex-runner-image",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@opencode/cli": "2.2.7"
+  }
+}

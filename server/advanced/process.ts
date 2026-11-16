@@ -42,13 +42,21 @@ export function execute(executable: string, args: string[], options: RunOptions)
 }
 export interface StoredCommand extends CommandResult { projectId: string; kind: 'command' | 'test'; signal: string | null; timedOut: boolean; truncated: boolean }
 export async function runCommand(ctx: Context, p: Project, input: unknown): Promise<StoredCommand> {
-  confirmed(input); trusted(p);
+  confirmed(input);
   const body = z.object({ command: z.string().min(1).max(16_000).refine((s) => !s.includes('\0')), confirm: z.literal(true), kind: z.enum(['command', 'test']).default('command'), timeoutMs: z.number().int().min(50).max(120_000).optional() }).strict().parse(input);
   return withProjectLock(p.id, async () => {
-    ctx.project(p.id); trusted(ctx.project(p.id));
+    ctx.project(p.id);
     let result: Execution;
-    try { result = await execute('/bin/bash', ['--noprofile', '--norc', '-c', body.command], { cwd: p.path, timeoutMs: body.timeoutMs }); }
-    catch (error) { throw new AdvancedError(503, 'RUNNER_UNAVAILABLE', redact(ctx, error instanceof Error ? error.message : 'Runner indisponible.')); }
+    try {
+      if (!p.trusted) {
+        if (!ctx.runner) throw new AdvancedError(403, 'UNTRUSTED_PROJECT', 'Exécution refusée : aucun runner isolé certifié n’est disponible.');
+        result = await ctx.runner.execute(p, body.command, { kind: body.kind, limits: { timeoutMs: body.timeoutMs ?? 30_000 } });
+      } else {
+        trusted(p);
+        result = await execute('/bin/bash', ['--noprofile', '--norc', '-c', body.command], { cwd: p.path, timeoutMs: body.timeoutMs });
+      }
+    }
+    catch (error) { if (error instanceof AdvancedError) throw error; throw new AdvancedError(503, 'RUNNER_UNAVAILABLE', redact(ctx, error instanceof Error ? error.message : 'Runner indisponible.')); }
     const record: StoredCommand = { id: id(), projectId: p.id, kind: body.kind, command: redact(ctx, body.command), ...result, output: redact(ctx, result.output), createdAt: now() };
     ctx.store.put('commands', record, p.id);
     ctx.history(p.id, body.kind === 'test' ? 'test' : 'command', 'Commande exécutée', JSON.stringify({ id: record.id, command: record.command, exitCode: record.exitCode, timedOut: record.timedOut, truncated: record.truncated }));

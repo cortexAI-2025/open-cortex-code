@@ -69,8 +69,10 @@ function registerCoreRoutes(app: Express, ctx: CoreContext, advancedAvailable: (
     pairings.revoke(id(req)); res.json({ state: 'revoked' });
   });
   app.get('/api/health', (_req, res) => res.json({ healthy: true, version: '0.1.0', engineVersion: ENGINE_VERSION, localOnly: true }));
+  app.get('/api/runner/capability', (_req, res) => res.json(ctx.runner.capability()));
   app.get('/api/bootstrap', (_req, res) => {
-    const body: Bootstrap = { projects: ctx.store.all<Project>('projects'), profiles: ctx.store.all<Profile>('profiles').map((profile) => ctx.profile(profile.id)), version: '0.1.0', engineVersion: ENGINE_VERSION, capabilities: { localConnector: true, files: true, engine: true, memory: true, byokMemory: true, sandbox: false, osVault: false, advanced: advancedAvailable() } };
+    const runner = ctx.runner.capability();
+    const body: Bootstrap = { projects: ctx.store.all<Project>('projects'), profiles: ctx.store.all<Profile>('profiles').map((profile) => ctx.profile(profile.id)), version: '0.1.0', engineVersion: ENGINE_VERSION, capabilities: { localConnector: true, files: true, engine: true, memory: true, byokMemory: true, sandbox: runner.available && runner.certified, osVault: false, advanced: advancedAvailable() } };
     res.json(body);
   });
   app.get('/api/projects', (_req, res) => res.json(ctx.store.all<Project>('projects')));
