@@ -76,12 +76,15 @@ export class LocalScheduler {
         try {
           this.ctx.project(task.projectId);
           if (task.mode !== 'ask') {
-            this.ctx.store.put('automations', { ...task, enabled: false, nextRun: undefined, lastError: 'Configuration unattended sensible refusée.', updatedAt: now() }, task.projectId);
+            const disabled = { ...task, enabled: false, nextRun: undefined, lastError: 'Configuration unattended sensible refusée.', updatedAt: now() };
+            if (!this.ctx.store.compareAndSwap('automations', task, disabled, task.projectId)) continue;
             throw new AdvancedError(403, 'UNATTENDED_READ_ONLY', 'Configuration unattended sensible refusée.');
           }
-          // Advance first: no duplicate invocation or catch-up flood after restart/failure.
+          // Advance atomically before execution: only one process claims this occurrence.
+          // Keep the existing at-most-once behavior and avoid catch-up floods after restart/failure.
           const nextRun = task.schedule === 'once' ? undefined : nextOccurrence(task, date);
-          this.ctx.store.put('automations', { ...task, nextRun, enabled: task.schedule === 'once' ? false : task.enabled, updatedAt: now() }, task.projectId);
+          const advanced = { ...task, nextRun, enabled: task.schedule === 'once' ? false : task.enabled, updatedAt: now() };
+          if (!this.ctx.store.compareAndSwap('automations', task, advanced, task.projectId)) continue;
           await this.run(task, true);
         } catch (error) {
           try { this.ctx.history(task.projectId, 'automation-error', 'Échéance locale non exécutée', redact(this.ctx, error instanceof Error ? error.message : String(error))); } catch { /* project was removed */ }

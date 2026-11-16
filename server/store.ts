@@ -44,6 +44,17 @@ export class Store {
     this.db.prepare('INSERT INTO records(kind,id,project_id,value) VALUES(?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET project_id=excluded.project_id,value=excluded.value').run(kind, value.id, projectId ?? null, json);
     return clean;
   }
+  compareAndSwap<T extends { id: string }>(kind: string, expected: T, replacement: T, projectId?: string): boolean {
+    if (!kind || !expected.id || expected.id !== replacement.id) throw new HttpError(400, 'Identifiant stockage requis.', 'INVALID_RECORD');
+    assertNoSecrets(replacement);
+    const expectedJson = JSON.stringify(expected);
+    const json = this.redact(JSON.stringify(replacement));
+    if (Buffer.byteLength(json) > 4 * 1024 * 1024) throw new HttpError(413, 'Entrée trop volumineuse.', 'RECORD_TOO_LARGE');
+    const clean = JSON.parse(json) as T;
+    const result = this.db.prepare('UPDATE records SET value=? WHERE kind=? AND id=? AND project_id IS ? AND value=?')
+      .run(json, kind, expected.id, projectId ?? null, expectedJson);
+    return Number(result.changes) === 1 && Boolean(clean);
+  }
   remove(kind: string, id: string): void { this.db.prepare('DELETE FROM records WHERE kind=? AND id=?').run(kind, id); }
   close(): void { this.db.close(); }
 }
