@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { randomBytes, createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { administratorConfig } from '../server/engine.js';
 
 const require = createRequire(import.meta.url);
 const model = process.env.CORTEX_TEST_MODEL ?? 'qwen3:1.7b';
@@ -47,9 +48,9 @@ const config = {
   providers:{ollama:{settings:{baseURL:'http://127.0.0.1:11434/v1'},models:{[model]:{name:model,capabilities:{tools:true},limit:{context:16384,output:4096}}}}},
   policies:[{action:'plugin.use',resource:'*',effect:'deny'},{action:'mcp.use',resource:'*',effect:'deny'}],
   agents:{
-    'cortex-test-ask':{mode:'primary',description:'Read only',system:'Read the requested project file with the read tool, then answer concisely. Do not change files. /no_think',permissions:rules(false),steps:8},
-    'cortex-test-plan':{mode:'primary',description:'Read and plan only',system:'Read the named source files, then provide a concise technical plan. No edits or shell. /no_think',permissions:rules(false),steps:8},
-    'cortex-test-agent':{mode:'primary',description:'Approved coding fixture',system:'Fix the requested small JavaScript bugs using read and edit tools. Run node --test using shell. Only operate in this test directory. Be concise. /no_think',permissions:rules(true),steps:16},
+    'cortex-test-ask':{mode:'primary',description:'Read only',system:`${(administratorConfig('ask').agents as Record<string,{system:string}>)['cortex-ask'].system} /no_think`,permissions:rules(false),steps:40},
+    'cortex-test-plan':{mode:'primary',description:'Read and plan only',system:`${(administratorConfig('plan').agents as Record<string,{system:string}>)['cortex-plan'].system} /no_think`,permissions:rules(false),steps:4},
+    'cortex-test-agent':{mode:'primary',description:'Approved coding fixture',system:`${(administratorConfig('agent').agents as Record<string,{system:string}>)['cortex-agent'].system} /no_think`,permissions:rules(true),steps:40},
   },
 };
 async function save(): Promise<void> { await writeFile(output, JSON.stringify(report, null, 2)+'\n'); }
@@ -73,14 +74,29 @@ async function sessionRun(agent: string, text: string): Promise<{id:string;messa
   const wait = client.session.wait({sessionID:session.id},{signal:AbortSignal.timeout(600000)}).then(()=>{done=true},error=>{done=true;waitError=error});
   const deadline = Date.now()+600000;
   const decisions: unknown[]=[];
+  const sessionRecord: Record<string,unknown> = {id:session.id,agent,inputId:initial.id,messages:[],decisions};
+  sessions.push(sessionRecord);
+  await save();
   let progress=0;
   while (!done && Date.now()<deadline) {
     const pending = await client.permission.list({sessionID:session.id});
     for (const request of pending) {
       const allowed = agent==='cortex-test-agent' && (request.action==='edit' && request.resources.every(p=>['calculator.js','formatter.js',join(workspace,'calculator.js'),join(workspace,'formatter.js')].includes(p)) || request.action==='shell' && request.resources.every(p=>p==='node --test'));
-      await client.permission.reply({sessionID:session.id,requestID:request.id,decision:allowed?'once':'reject'});
-      decisions.push({action:request.action,resources:request.resources,decision:allowed?'once':'reject'});
-      console.log('Permission fixture:',request.action,allowed?'once':'reject');
+      try {
+        await client.permission.reply({sessionID:session.id,requestID:request.id,decision:allowed?'once':'reject'});
+        decisions.push({action:request.action,resources:request.resources,decision:allowed?'once':'reject'});
+        console.log('Permission fixture:',request.action,allowed?'once':'reject',JSON.stringify(request.resources));
+      } catch(error) {
+        const stillPending=await client.permission.list({sessionID:session.id});
+        if(String(error).includes('Permission request not found')&&!stillPending.some(item=>item.id===request.id)) {
+          decisions.push({action:request.action,resources:request.resources,decision:'stale-not-pending'});
+          console.log('Permission already absent from pending list:',request.action,JSON.stringify(request.resources));
+          await save();
+          continue;
+        }
+        throw error;
+      }
+      await save();
     }
     if (Date.now()-progress>10000) { console.log('Session en cours:',agent);progress=Date.now(); }
     await sleep(700);
@@ -89,7 +105,7 @@ async function sessionRun(agent: string, text: string): Promise<{id:string;messa
   if(waitError) throw waitError;
   const all = await client.session.context({sessionID:session.id});
   const messages = all.filter((m):m is SessionMessageAssistant=>m.type==='assistant');
-  sessions.push({id:session.id,agent,inputId:initial.id,messages,decisions});
+  sessionRecord.messages=messages;
   await save();
   return {id:session.id,messages};
 }
@@ -114,14 +130,33 @@ try {
   record('Authentification moteur obligatoire',noAuth.status===401,noAuth.status);
   const before=runTests(); record('Fixture initialement en échec réel',before.exitCode!==0,before);report.initialTests=before;
   const beforeHash=await hashes();
-  const ask=await sessionRun('cortex-test-ask','Read calculator.js using a tool. What arithmetic bug is present?');
-  record('Ask: réponse LLM réelle et lecture outil',ask.messages.some(m=>m.content.some(c=>c.type==='tool'&&c.name==='read'&&c.state.status==='completed'))&&ask.messages.some(m=>m.content.some(c=>c.type==='text'&&c.text.length>10)),ask.id);
+  const ask=await sessionRun('cortex-test-ask','The contract of add(a,b) is to return a+b. Read calculator.js and say whether its implementation conforms; identify any mismatch in one sentence.');
+  const askRead=ask.messages.some(m=>m.content.some(c=>c.type==='tool'&&c.name==='read'&&c.state.status==='completed'));
+  const askAnswer=ask.messages.flatMap(m=>m.content).filter((c):c is Extract<(typeof ask.messages)[number]['content'][number],{type:'text'}>=>c.type==='text').map(c=>c.text).join('\n');
+  const askGrounded=/\badd\b/iu.test(askAnswer)&&(/\ba\s*-\s*b\b/iu.test(askAnswer)||/subtract/iu.test(askAnswer))&&(/\ba\s*\+\s*b\b/iu.test(askAnswer)||/addition/iu.test(askAnswer));
+  record('Ask: lecture outil et diagnostic fidèle à la source',askRead&&askGrounded,{sessionId:ask.id,usedReadTool:askRead,groundedAnswer:askGrounded,answer:askAnswer.slice(0,1200)});
   record('Ask ne modifie aucun fichier',beforeHash===await hashes(),ask.id);
-  const plan=await sessionRun('cortex-test-plan','Read formatter.js using the read tool. Plan how to change currency from USD to EUR, without changing any files.');
-  record('Plan: réponse réelle sans mutation',plan.messages.some(m=>m.content.some(c=>c.type==='text'&&c.text.length>10))&&beforeHash===await hashes(),plan.id);
-  const agent=await sessionRun('cortex-test-agent','Fix two files: calculator.js add(a,b) must return a+b (currently a-b). formatter.js formatTotal(n) must return n.toFixed(2) followed by a space and EUR (currently USD). Read both files, edit both, then run node --test.');
+  const plan=await sessionRun('cortex-test-plan','Read formatter.js. Its current output uses USD; give me a one-sentence plan to change it to EUR. Do not modify any files.');
+  const planTools=plan.messages.flatMap(m=>m.content).filter(c=>c.type==='tool');
+  const planInspection=planTools.some(c=>{
+    if(!['read','grep','glob','list'].includes(c.name)||c.state.status!=='completed') return false;
+    const input=c.state.input;
+    return typeof input==='object'&&input!==null&&!Array.isArray(input)&&'path' in input&&String(input.path).split(/[\\/]/u).pop()==='formatter.js';
+  });
+  const planAnswer=plan.messages.flatMap(m=>m.content).filter((c):c is Extract<(typeof plan.messages)[number]['content'][number],{type:'text'}>=>c.type==='text').map(c=>c.text).join('\n');
+  const planGrounded=/\bUSD\b/iu.test(planAnswer)&&/\bEUR\b/iu.test(planAnswer);
+  const planReadOnly=!planTools.some(c=>['edit','write','shell','bash'].includes(c.name));
+  record('Plan: inspection ciblée, synthèse fondée et sans mutation',planInspection&&planGrounded&&planReadOnly&&beforeHash===await hashes(),{sessionId:plan.id,inspectedFormatter:planInspection,groundedAnswer:planGrounded,readOnlyTools:planReadOnly,answer:planAnswer.slice(0,1000)});
+  const agent=await sessionRun('cortex-test-agent','In this workspace, add(2,3) must return 5 and formatTotal(5) must return exactly `5.00 EUR`. First call read on calculator.js, then read on formatter.js. Do not edit either file until both reads succeeded. Make only these replacements: `a - b` to `a + b` in calculator.js, and `USD` to `EUR` in formatter.js. Then call shell with the exact command `node --test` from the workspace root, wait for its output, and report whether the tests pass.');
   const after=runTests();report.finalTests=after;
   const diff=execFileSync('git',['diff'],{cwd:workspace,encoding:'utf8'});report.diff=diff;
+  const agentTools=agent.messages.flatMap(m=>m.content).filter(c=>c.type==='tool');
+  const readPaths=agentTools.filter(c=>c.name==='read'&&c.state.status==='completed').map(c=>{
+    const input=c.state.input;
+    return typeof input==='object'&&input!==null&&!Array.isArray(input)&&'path' in input ? String(input.path).split(/[\\/]/u).pop() : '';
+  });
+  const successfulEdits=agentTools.filter(c=>c.name==='edit'&&c.state.status==='completed').length;
+  record('Agent: lectures et éditions acceptées par le moteur',readPaths.includes('calculator.js')&&readPaths.includes('formatter.js')&&successfulEdits>=2,{readPaths,successfulEdits});
   record('Agent: modifications multi-fichiers réelles',diff.includes('calculator.js')&&diff.includes('formatter.js'),diff);
   record('Tests de la fixture après Agent',after.exitCode===0,after);
   record('Agent a réellement invoqué shell tests',agent.messages.some(m=>m.content.some(c=>c.type==='tool'&&c.name==='shell'&&c.state.status==='completed')),agent.id);
