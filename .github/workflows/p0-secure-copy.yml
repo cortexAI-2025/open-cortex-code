@@ -1,0 +1,19 @@
+name: P0 secure-copy regression
+on:
+  push:
+    branches: [fix/p0-atomic-workspace-copy]
+  pull_request:
+    branches: [p0-runner-hardening]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  secure-copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run secure-copy regression tests
+        run: python3 -m unittest discover -s tests -p 'test_secure_copy.py' -v
+      - name: Syntax validation
+        run: python3 -m py_compile scripts/copy-workspace-secure.py tests/test_secure_copy.py
