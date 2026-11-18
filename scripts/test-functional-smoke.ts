@@ -29,15 +29,20 @@ try {
   const filePath = `/api/projects/${project.body.id}/file`;
   const file = await request(filePath + '?path=hello.txt');
   if (file.status !== 200 || file.body.content !== 'before\n') throw new Error('File read failed');
+  const untrustedWrite = await request(filePath, 'PUT', { path: 'hello.txt', content: 'after\n', hash: file.body.hash, confirm: true });
+  if (untrustedWrite.status !== 403 || untrustedWrite.body.code !== 'UNTRUSTED_PROJECT') throw new Error(`Untrusted write was not rejected: ${untrustedWrite.status}`);
+  const command = await request(`/api/projects/${project.body.id}/commands`, 'POST', { command: 'node --test', kind: 'test', confirm: true });
+  if (command.status !== 403) throw new Error('Untrusted project command was not rejected');
+  // Explicit user consent: re-submitting the same project path with trusted=true.
+  const trusted = await request('/api/projects', 'POST', { name: 'Smoke project', path: projectPath, trusted: true });
+  if (trusted.status !== 200 || trusted.body.id !== project.body.id || trusted.body.trusted !== true) throw new Error('Explicit project trust failed');
   const noConfirm = await request(filePath, 'PUT', { path: 'hello.txt', content: 'after\n', hash: file.body.hash });
   if (noConfirm.status !== 400) throw new Error('Unconfirmed write was not rejected');
   const written = await request(filePath, 'PUT', { path: 'hello.txt', content: 'after\n', hash: file.body.hash, confirm: true });
   if (written.status !== 200 || written.body.content !== 'after\n') throw new Error('Confirmed write failed');
   const stale = await request(filePath, 'PUT', { path: 'hello.txt', content: 'overwrite', hash: file.body.hash, confirm: true });
   if (stale.status !== 409) throw new Error('Stale hash did not produce conflict');
-  const command = await request(`/api/projects/${project.body.id}/commands`, 'POST', { command: 'node --test', kind: 'test', confirm: true });
-  if (command.status !== 403) throw new Error('Untrusted project command was not rejected');
-  console.log('PASS connector smoke: authentication, health, capabilities, project, file I/O, conflict, untrusted command denial');
+  console.log('PASS connector smoke: authentication, health, capabilities, project, untrusted write/command denial, explicit trust, file I/O, stale-hash conflict');
 } catch (error) {
   failed = true;
   console.error('FAIL connector smoke:', error);
