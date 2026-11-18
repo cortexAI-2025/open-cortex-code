@@ -3,9 +3,36 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readdirSync,
 import os from 'node:os';
 import path from 'node:path';
 import { CoreContext } from '../server/context.js';
+import { administratorConfig } from '../server/engine.js';
 import { ENGINE_VERSION, type Project, type Profile } from '../shared/contracts.js';
 const contexts: CoreContext[] = []; const roots: string[] = [];
 afterEach(async () => { await Promise.all(contexts.splice(0).map((ctx) => ctx.close())); roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })); });
+
+it('Ask et Plan imposent des réponses projet fondées sur les outils de lecture', () => {
+  for (const mode of ['ask', 'plan'] as const) {
+    const agents = administratorConfig(mode).agents as Record<string, { system: string }>;
+    const system = agents[`cortex-${mode}`].system;
+    expect(system.toLowerCase()).toContain('ne jamais inventer');
+    expect(system).toContain('le dire explicitement au lieu de deviner');
+    if (mode === 'ask') expect(system).toContain('le premier appel d’outil DOIT être `read`');
+    else {
+      expect(system).toContain('Inspecter les sources pertinentes avec les outils de lecture disponibles');
+      expect(system).toContain('`grep` pour une recherche ciblée');
+      expect(system).toContain('ne pas répéter le même appel d’outil');
+      expect(system).toContain('fournir obligatoirement une réponse finale visible');
+    }
+  }
+});
+
+it('Agent doit copier exactement les sources lues avant une édition', () => {
+  const agents = administratorConfig('agent').agents as Record<string, { system: string }>;
+  const system = agents['cortex-agent'].system;
+  expect(system).toContain('Copier l’ancien texte exactement depuis le résultat de lecture');
+  expect(system).toContain('lire individuellement chaque fichier cible par son chemin exact');
+  expect(system).toContain('exécuter obligatoirement la commande de test pertinente');
+  expect(system).toContain('Si une édition échoue, relire la source avant une nouvelle tentative');
+  expect(system).toContain('Ne jamais inventer un chemin de test');
+});
 
 it('OpenCode2.2.7 foreground réel : info, Location/session et hard-deny Ask/Plan, Agent ask sans exécuter une génération', async () => {
   const root = mkdtempSync(path.join(os.tmpdir(), 'cortex-engine-test-')); roots.push(root);

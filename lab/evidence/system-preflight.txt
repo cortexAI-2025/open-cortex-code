@@ -1,0 +1,19 @@
+Linux d895d8305aa0 6.18.38+ #1 SMP Thu Oct  1 17:24:34 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+PRETTY_NAME="Ubuntu 24.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.5 LTS (Noble Numbat)"
+VERSION_CODENAME=noble
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=noble
+LOGO=ubuntu-logo
+cgroup2fs
+cpuset cpu io memory hugetlb pids
+crun version 1.14.1
+commit: de537a7965bfbe9992e2cfae0baeb56a08128171
+podman version 4.9.3
