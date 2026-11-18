@@ -6,6 +6,7 @@ import os
 import stat
 import sys
 import shutil
+import tempfile
 
 SYS_OPENAT2 = 437
 RESOLVE_NO_XDEV = 0x01
@@ -90,16 +91,44 @@ def copy_dir(srcfd, dstfd):
             if dfd is not None:
                 os.close(dfd)
 
+def secure_copy(src, dst):
+    """Stage in the destination filesystem; never delete caller-owned paths."""
+    src = os.path.abspath(src)
+    dst = os.path.abspath(dst)
+    parent = os.path.dirname(dst)
+    if os.path.lexists(dst):
+        raise FileExistsError(errno.EEXIST, "destination already exists", dst)
+    if not os.path.isdir(parent):
+        raise FileNotFoundError(errno.ENOENT, "destination parent missing", parent)
+    staging = tempfile.mkdtemp(prefix=".cortex-copy-", dir=parent)
+    try:
+        copy_tree(src, staging)
+        # Refuse publishing over a destination created concurrently.
+        # Hard-link a sentinel first to reserve the final name atomically.
+        # Directory rename itself cannot replace a nonempty destination,
+        # but may replace an empty directory: use renameat2(NOREPLACE).
+        renameat2_noreplace(staging, dst)
+        staging = None
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging)
+
+def renameat2_noreplace(src, dst):
+    # Linux renameat2 with RENAME_NOREPLACE = 1.
+    # No fallback to os.rename(): it may overwrite caller-owned directories.
+    rc = libc.syscall(316, -100, os.fsencode(src), -100, os.fsencode(dst), 1)
+    if rc != 0:
+        err = ctypes.get_errno()
+        raise OSError(err, os.strerror(err), dst)
+
 if len(sys.argv) != 3:
     print("usage: copy-workspace-secure.py SOURCE DEST", file=sys.stderr)
     sys.exit(2)
 try:
-    copy_tree(os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2]))
+    secure_copy(sys.argv[1], sys.argv[2])
 except OSError as exc:
     print(f"secure-copy-error: {exc}", file=sys.stderr)
-    shutil.rmtree(os.path.abspath(sys.argv[2]), ignore_errors=True)
     sys.exit(77 if exc.errno == errno.ENOSYS else 1)
 except Exception as exc:
     print(f"secure-copy-error: {exc}", file=sys.stderr)
-    shutil.rmtree(os.path.abspath(sys.argv[2]), ignore_errors=True)
     sys.exit(1)
