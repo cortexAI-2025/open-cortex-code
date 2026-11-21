@@ -10,6 +10,20 @@ export type MissionStatus = 'active' | 'blocked' | 'needs-evidence' | 'proven' |
 export type StepKind = 'analyze' | 'edit' | 'test' | 'review' | 'publish';
 export interface MissionStep { id: string; title: string; kind: StepKind; status: 'pending' | 'done' | 'skipped' | 'failed'; required: boolean }
 export interface TestEvidence { id: string; commandId: string; command: string; exitCode: number | null; timedOut: boolean; truncated: boolean; createdAt: string }
+export interface RepairAttempt {
+  id: string;
+  index: number;
+  commandId?: string;
+  exitCode: number | null;
+  timedOut: boolean;
+  truncated: boolean;
+  files: string[];
+  diagnosis: string;
+  applied: string[];
+  rejected: string[];
+  stopped?: 'passed' | 'budget' | 'timeout' | 'cancelled' | 'no-fix' | 'scope' | 'test-tamper';
+  createdAt: string;
+}
 export interface Mission {
   id: string;
   projectId: string;
@@ -21,6 +35,7 @@ export interface Mission {
   claims: FileClaim[];
   conflicts: PathConflict[];
   evidence: TestEvidence[];
+  repairs?: RepairAttempt[];
   branch?: string;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +79,7 @@ export function presentMission(mission: Mission): Mission & { verdict: MissionVe
     claims: mission.claims.map((claim) => ({ agentId: claim.agentId, paths: [...claim.paths] })),
     conflicts: mission.conflicts.map((conflict) => ({ path: conflict.path, agents: [...conflict.agents] })),
     evidence: mission.evidence.map((item) => ({ ...item })),
+    repairs: (mission.repairs ?? []).map((item) => ({ ...item, files: [...item.files], applied: [...item.applied], rejected: [...item.rejected] })),
   };
   if (copy.status !== 'cancelled') syncTestStep(copy);
   const verdict = completionVerdict(copy);
@@ -77,6 +93,10 @@ function save(ctx: Context, mission: Mission): Mission & { verdict: MissionVerdi
   const { verdict: _verdict, ...stored } = view;
   ctx.store.put('missions', stored, mission.projectId);
   return view;
+}
+
+export function storeMission(ctx: Context, mission: Mission): Mission & { verdict: MissionVerdict } {
+  return save(ctx, mission);
 }
 
 export function suggestBranch(title: string, unique: string): string {
@@ -119,7 +139,7 @@ export function createMission(ctx: Context, p: Project, input: unknown): Mission
       { id: id(), title: 'Revue du diff en lecture seule', kind: 'review', status: 'pending', required: false },
       { id: id(), title: 'Publier sur une branche cortex/ après accord', kind: 'publish', status: 'pending', required: false },
     ],
-    claims: [], conflicts: [], evidence: [], createdAt: stamp, updatedAt: stamp, resumeCount: 0,
+    claims: [], conflicts: [], evidence: [], repairs: [], createdAt: stamp, updatedAt: stamp, resumeCount: 0,
   };
   const view = save(ctx, mission);
   ctx.history(p.id, 'mission', 'Mission locale ouverte', `${view.id} : ${view.title}. Aucun modèle appelé.`);

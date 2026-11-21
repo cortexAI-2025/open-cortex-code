@@ -29,6 +29,22 @@ interface RestorePreview {
     checkpoint: Checkpoint;
     hashes: Record<string, string | null>;
 }
+interface PublishView {
+    currentBranch: string;
+    headFiles: string[];
+    remoteCertified: false;
+    latest: {
+        branch: string;
+        base?: string;
+        message?: string;
+        files: string[];
+        pushed: boolean;
+        url: string | null;
+        phase: string;
+        detail: string;
+        remoteCertified: false;
+    } | null;
+}
 export function GitPanel() {
     const { api } = useConnection();
     const { projectId } = useWorkspace();
@@ -49,6 +65,7 @@ export function GitPanel() {
     const git = useResource<GitState>(api, projectId ? projectRoute(projectId, 'git') : null);
     const checkpoints = useResource<Checkpoint[]>(api, projectId ? projectRoute(projectId, 'git/checkpoints') : null);
     const github = useResource<unknown>(api, projectId && tab === 'github' ? projectRoute(projectId, 'github') : null);
+    const publish = useResource<PublishView>(api, projectId && tab === 'publish' ? projectRoute(projectId, 'git/publish') : null);
     const mutate = async (resource: string, body: Record<string, unknown>, title: string, detail: string) => {
         if (!api || !projectId || !await confirm(title, detail))
             return;
@@ -56,6 +73,7 @@ export function GitPanel() {
         await act(() => api.request(projectRoute(projectId, resource), 'POST', { ...body, confirm: true }), 'Opération Git confirmée par le connecteur.');
         git.refresh();
         checkpoints.refresh();
+        publish.refresh();
         setBusy(false);
     };
     const restore = async (checkpoint: Checkpoint, hashes?: Record<string, string | null>) => {
@@ -91,15 +109,17 @@ export function GitPanel() {
     {tab === 'checkpoints' && <><ErrorBox error={checkpoints.error} retry={checkpoints.refresh}/>{checkpoints.data?.length === 0 && <p className="small">Aucun checkpoint enregistré.</p>}{checkpoints.data?.map(item => <div className="checkpoint-row" key={item.id}><div><strong>{item.message || item.id}</strong><small>{dateLabel(item.createdAt)} · {item.files?.length ?? 0} fichiers · {item.excluded?.length ?? 0} exclus</small></div><button className="danger" disabled={busy} onClick={() => void restore(item)}><RotateCcw size={13}/>Examiner & restaurer</button></div>)}</>}
     {preview && <section className="form-panel restore-preview"><h3>Aperçu : fichiers qui seront restaurés</h3><p className="small">Hash actuel sur disque. Vérifiez chaque chemin ; la restauration sera refusée en cas de changement concurrent.</p><pre className="result-json">{Object.entries(preview.hashes).map(([path, hash]) => `${path}\n  ${hash || 'Absent sur disque'}`).join('\n')}</pre><div className="button-row"><button className="secondary" onClick={() => setPreview(null)}>Annuler</button><button className="danger" disabled={busy} onClick={() => void restore(preview.checkpoint, preview.hashes)}>Restaurer les chemins examinés</button></div></section>}
     {tab === 'github' && <><ErrorBox error={github.error} retry={github.refresh}/>{github.loading && <Loading />}{github.data !== null && <pre className="result-json">{JSON.stringify(github.data, null, 2)}</pre>}<p className="small">État du CLI gh local uniquement. PR/workflows en lecture ; aucun connecteur Manus, push ni merge automatique.</p></>}
-    {tab === 'publish' && git.data?.available && <form className="stack-form" onSubmit={e => e.preventDefault()}><p className="small">Branche de travail cortex/ uniquement. Jamais de commit sur main, master, gh-pages ou trunk. Jamais de merge. La PR, si vous l’autorisez, peut pousser la branche sans --force.</p>
-      <div className="inline-form"><input aria-label="Branche cortex" value={featureBranch} onChange={e => setFeatureBranch(e.target.value)} required/><button className="secondary" disabled={busy} onClick={() => void mutate('git/feature-branch', { name: featureBranch }, 'Créer et activer cette branche ?', `Basculer sur ${featureBranch}. Aucun push. La branche main n’est pas modifiée.`)}>Créer et activer</button></div>
+    {tab === 'publish' && git.data?.available && <form className="stack-form" onSubmit={e => e.preventDefault()}><ErrorBox error={publish.error} retry={publish.refresh}/>{publish.loading && <Loading />}<p className="small">État réel du dépôt. Branche de travail cortex/ uniquement. Jamais de commit sur main, master, gh-pages ou trunk. Jamais de merge ni de push --force. La publication distante n’est pas certifiée au-delà de la sortie locale de gh.</p>
+      {publish.data && <div className="small"><p>Branche courante : {publish.data.currentBranch || 'inconnue'}</p><p>Fichiers du HEAD : {publish.data.headFiles.join(', ') || 'aucun'}</p>{publish.data.latest ? <p>Dernière publication : {publish.data.latest.phase} · {publish.data.latest.branch}{publish.data.latest.base ? ` → ${publish.data.latest.base}` : ''} · {publish.data.latest.message || 'sans message'} · fichiers {publish.data.latest.files.join(', ') || 'non listés'} · poussée {publish.data.latest.pushed ? 'oui' : 'non'}{publish.data.latest.url ? ` · ${publish.data.latest.url}` : ''}</p> : <p>Aucune opération de publication enregistrée.</p>}<p>Certification distante : {publish.data.remoteCertified ? 'oui' : 'non'}</p></div>}
+      <div className="inline-form"><input aria-label="Branche cortex" value={featureBranch} onChange={e => setFeatureBranch(e.target.value)} required/><button className="secondary" type="button" disabled={busy} onClick={() => void mutate('git/feature-branch', { name: featureBranch }, 'Créer et activer cette branche ?', `Basculer sur ${featureBranch}. Aucun push. La branche main n’est pas modifiée.`)}>Créer et activer</button></div>
       <input aria-label="Message de commit" value={commitMessage} onChange={e => setCommitMessage(e.target.value)} placeholder="Message de commit" required/>
       <input aria-label="Chemins à committer" value={paths} onChange={e => setPaths(e.target.value)} placeholder="Chemins relatifs séparés par des espaces" required/>
-      <button className="secondary" disabled={busy} onClick={() => void mutate('git/commit', { message: commitMessage, paths: paths.split(/\s+/).filter(Boolean) }, 'Créer ce commit local ?', 'Seuls les fichiers listés sont ajoutés. Les chemins sensibles sont refusés. Aucun push.')}>Commit local des chemins listés</button>
+      <button className="secondary" type="button" disabled={busy} onClick={() => void mutate('git/commit', { message: commitMessage, paths: paths.split(/\s+/).filter(Boolean) }, 'Créer ce commit local ?', 'Seuls les fichiers listés sont ajoutés. Les chemins sensibles sont refusés. Aucun push.')}>Commit local des chemins listés</button>
+      <button className="secondary" type="button" disabled={busy} onClick={() => void mutate('git/push', { allowPush: true }, 'Pousser la branche courante ?', 'Push vers origin de la branche de travail, sans --force. Cette confirmation est distincte de la pull request. Aucune fusion.')}>Pousser sans force</button>
       <input aria-label="Titre de pull request" value={prTitle} onChange={e => setPrTitle(e.target.value)} placeholder="Titre de la pull request"/>
       <input aria-label="Branche de base" value={prBase} onChange={e => setPrBase(e.target.value)} placeholder="Base, ex. main"/>
       <textarea className="text-editor" aria-label="Corps de pull request" value={prBody} onChange={e => setPrBody(e.target.value)} placeholder="Corps : preuves, limites, pas de fusion."/>
-      <button className="secondary" disabled={busy || !prTitle || !prBody} onClick={() => void mutate('git/pull-request', { base: prBase || 'main', title: prTitle, body: prBody, allowPush: true }, 'Ouvrir une pull request ?', 'gh peut pousser la branche courante sans force. Aucune fusion n’est exécutée. La branche protégée ne peut pas être le head.')}>Ouvrir la PR, sans la fusionner</button>
+      <button className="secondary" type="button" disabled={busy || !prTitle || !prBody} onClick={() => void mutate('git/pull-request', { base: prBase || 'main', title: prTitle, body: prBody, allowPush: true }, 'Ouvrir une pull request ?', 'Le HEAD local doit déjà être sur origin via le push confirmé. gh pr create ne fusionne pas et ne force pas. Un échec d’authentification n’ouvre aucune PR.')}>Ouvrir la PR, sans la fusionner</button>
     </form>}
   </div>;
 }

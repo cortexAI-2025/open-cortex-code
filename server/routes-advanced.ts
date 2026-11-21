@@ -9,6 +9,8 @@ import { registerMcpRoutes } from './advanced/mcp.js';
 import { registerAgentDeliveryRoutes } from './advanced/agents-delivery.js';
 import { registerGitPublishRoutes } from './advanced/git-publish.js';
 import { registerMissionRoutes } from './advanced/mission.js';
+import { registerRepairRoutes } from './advanced/repair.js';
+import { registerWorktreeClaimRoutes } from './advanced/worktree-claims.js';
 
 export { shutdownAdvanced } from './advanced/automations.js';
 
@@ -22,5 +24,7 @@ export function registerAdvancedRoutes(app: Express, ctx: ConnectorContext): voi
   registerMcpRoutes(app, ctx);
   registerAgentDeliveryRoutes(app, ctx);
   registerMissionRoutes(app, ctx);
+  registerRepairRoutes(app, ctx);
+  registerWorktreeClaimRoutes(app, ctx);
   registerAutomationRoutes(app, ctx);
 }

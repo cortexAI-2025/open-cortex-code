@@ -147,13 +147,13 @@ describe('Git réel et mission, sans GitHub réseau', () => {
     await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPush: true }, runner)).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
     expect(runner).not.toHaveBeenCalled();
     await createAndCheckoutFeatureBranch(ctx, project, { name: 'cortex/mission-pr', confirm: true });
-    const gh = vi.fn(async (): Promise<Execution> => ({ output: 'https://github.com/example/fixture/pull/7\n', exitCode: 0, signal: null, timedOut: false, truncated: false, durationMs: 1 }));
+    await gitOk(project, ['update-ref', 'refs/remotes/origin/cortex/mission-pr', 'HEAD']);
+    const gh = vi.fn(async (_executable: string, args: string[]): Promise<Execution> => ({ output: args[0] === 'auth' ? 'logged in\n' : 'https://github.com/example/fixture/pull/7\n', exitCode: 0, signal: null, timedOut: false, truncated: false, durationMs: 1 }));
     const opened = await openPullRequest(ctx, project, { base: 'main', title: 'Mission', body: 'Pas de merge.', confirm: true, allowPush: true }, gh);
-    expect(opened).toMatchObject({ url: 'https://github.com/example/fixture/pull/7', merged: false, forced: false, branch: 'cortex/mission-pr' });
-    const call = (gh.mock.calls as unknown as [string, string[]][])[0];
-    expect(call?.[0]).toBe('gh');
-    expect(call?.[1]).not.toContain('merge');
-    expect(call?.[1]).not.toContain('--force');
+    expect(opened).toMatchObject({ url: 'https://github.com/example/fixture/pull/7', merged: false, forced: false, branch: 'cortex/mission-pr', remoteCertified: false });
+    const calls = gh.mock.calls as unknown as [string, string[]][];
+    expect(calls.some((call) => call[1]?.includes('pr') && call[1]?.includes('create'))).toBe(true);
+    expect(calls.every((call) => !call[1]?.includes('merge') && !call[1]?.includes('--force'))).toBe(true);
     await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'corps', confirm: true }, gh)).rejects.toThrow();
   });
 
