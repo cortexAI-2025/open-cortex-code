@@ -38,7 +38,7 @@ Les données OpenCode sont privées et séparées des données du produit. Aucun
 
 ## Git, MCP et automatisations
 
-Git utilise les commandes locales et fournit statut/diff/historique/branches. Les checkpoints sont des copies bornées locales qui préservent l'index Git. Une restauration vérifie les versions courantes et demande une confirmation avant écrasement. Worktree ne constitue pas une isolation OS et n'est jamais suivi d'un merge implicite. La publication passe par une branche `cortex/`, un commit limité aux chemins demandés, un push confirmé sans `--force`, puis une pull request seulement si le HEAD est déjà sur origin. La boucle de correction de mission relance des tests locaux et n'appelle pas de modèle.
+Git utilise les commandes locales et fournit statut/diff/historique/branches. Les checkpoints sont des copies bornées locales qui préservent l'index Git. Une restauration vérifie les versions courantes et demande une confirmation avant écrasement. Worktree ne constitue pas une isolation OS et n'est jamais suivi d'un merge implicite. La publication passe par une branche `cortex/`, un commit limité aux chemins demandés, un push confirmé sans `--force`, puis une pull request seulement si le HEAD est déjà sur origin. La mission Agent demande le correctif à OpenCode quand un modèle est joignable, puis le connecteur revérifie par un test ; sinon elle reste bloquée.
 
 Le gestionnaire MCP utilise le contrat V2 réel. Les transports et statuts disponibles proviennent du moteur. Les templates de fournisseurs externes ne prouvent pas une authentification. Les APIs REST utilisent des profils sans secrets publics et des appels de test à méthodes de lecture explicites.
 

@@ -59,7 +59,7 @@ async function safeWorktree(root: Project, location: string): Promise<Project> {
 }
 
 export async function changedPaths(target: Project): Promise<{ changes: WorktreeChange[]; rejected: string[] }> {
-  const raw = await gitOk(target, ['status', '--porcelain=v1', '-z', '--untracked-files=normal'], 2_000_000);
+  const raw = await gitOk(target, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], 2_000_000);
   const parsed = parsePorcelainZ(raw);
   const changes: WorktreeChange[] = [];
   for (const change of parsed.changes) {

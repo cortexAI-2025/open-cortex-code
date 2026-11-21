@@ -10,6 +10,7 @@ import { registerAgentDeliveryRoutes } from './advanced/agents-delivery.js';
 import { registerGitPublishRoutes } from './advanced/git-publish.js';
 import { registerMissionRoutes } from './advanced/mission.js';
 import { registerRepairRoutes } from './advanced/repair.js';
+import { registerAgentMissionRoutes } from './advanced/agent-mission.js';
 import { registerWorktreeClaimRoutes } from './advanced/worktree-claims.js';
 
 export { shutdownAdvanced } from './advanced/automations.js';
@@ -25,6 +26,7 @@ export function registerAdvancedRoutes(app: Express, ctx: ConnectorContext): voi
   registerAgentDeliveryRoutes(app, ctx);
   registerMissionRoutes(app, ctx);
   registerRepairRoutes(app, ctx);
+  registerAgentMissionRoutes(app, ctx);
   registerWorktreeClaimRoutes(app, ctx);
   registerAutomationRoutes(app, ctx);
 }

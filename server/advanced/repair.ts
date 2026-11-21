@@ -8,6 +8,9 @@ import { storeMission, type Mission, type RepairAttempt } from './mission.js';
 import { runCommand } from './process.js';
 
 const TEST_PATH = /(?:^|\/)(?:__tests__|tests?|specs?)\/|(?:\.(?:test|spec))\.[A-Za-z0-9]+$/u;
+export function isEvidencePath(file: string): boolean {
+  return TEST_PATH.test(file);
+}
 const SKIP_MARK = /\.skip\b|\bxit\(|\bxdescribe\(|\bit\.skip\b|\btest\.skip\b|\bpytest\.skip\b|@pytest\.mark\.skip\b/g;
 const TEST_CALL = /\b(?:it|test|describe)\(/g;
 const RUNNER = /^(?:node|pnpm|npm|npx|vitest|jest|pytest|python3?|go|cargo|bun)(?:\s|$)/u;

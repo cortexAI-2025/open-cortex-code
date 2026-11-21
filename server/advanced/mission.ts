@@ -21,7 +21,12 @@ export interface RepairAttempt {
   diagnosis: string;
   applied: string[];
   rejected: string[];
-  stopped?: 'passed' | 'budget' | 'timeout' | 'cancelled' | 'no-fix' | 'scope' | 'test-tamper';
+  stopped?: 'passed' | 'budget' | 'timeout' | 'cancelled' | 'no-fix' | 'scope' | 'test-tamper' | 'permission' | 'blocked' | 'conflict';
+  model?: string;
+  sessionId?: string;
+  invoked?: boolean;
+  budgetMs?: number;
+  tokens?: { input: number; output: number };
   createdAt: string;
 }
 export interface Mission {
@@ -40,8 +45,21 @@ export interface Mission {
   createdAt: string;
   updatedAt: string;
   resumeCount: number;
+  agentSessionId?: string;
 }
-export interface MissionVerdict { complete: boolean; status: MissionStatus; reasons: string[] }
+export interface MissionVerdict { complete: boolean; status: MissionStatus; reasons: string[]; label?: MissionLabel }
+export type MissionLabel = 'PROVEN' | 'FAILED' | 'BLOCKED' | 'CANCELLED' | 'IN_PROGRESS';
+
+export function missionLabel(mission: Pick<Mission, 'repairs'>, verdict: MissionVerdict): MissionLabel {
+  if (verdict.status === 'cancelled') return 'CANCELLED';
+  if (verdict.complete) return 'PROVEN';
+  if (verdict.status === 'blocked') return 'BLOCKED';
+  if (verdict.status === 'failed') return 'FAILED';
+  const last = mission.repairs?.at(-1);
+  if (last?.stopped === 'blocked' || last?.stopped === 'permission' || last?.stopped === 'conflict' || last?.stopped === 'scope' || last?.stopped === 'test-tamper') return 'BLOCKED';
+  if (last && last.index >= 3 && last.stopped && last.stopped !== 'passed') return 'FAILED';
+  return 'IN_PROGRESS';
+}
 
 const PROOF_RULE = 'Ne pas déclarer la mission terminée sans un test local exit 0, non tronqué et sans timeout, et sans conflit de fichiers.';
 
@@ -79,10 +97,11 @@ export function presentMission(mission: Mission): Mission & { verdict: MissionVe
     claims: mission.claims.map((claim) => ({ agentId: claim.agentId, paths: [...claim.paths] })),
     conflicts: mission.conflicts.map((conflict) => ({ path: conflict.path, agents: [...conflict.agents] })),
     evidence: mission.evidence.map((item) => ({ ...item })),
-    repairs: (mission.repairs ?? []).map((item) => ({ ...item, files: [...item.files], applied: [...item.applied], rejected: [...item.rejected] })),
+    repairs: (mission.repairs ?? []).map((item) => ({ ...item, files: [...item.files], applied: [...item.applied], rejected: [...item.rejected], tokens: item.tokens ? { ...item.tokens } : undefined })),
   };
   if (copy.status !== 'cancelled') syncTestStep(copy);
-  const verdict = completionVerdict(copy);
+  const verdict = { ...completionVerdict(copy), label: undefined as MissionLabel | undefined };
+  verdict.label = missionLabel(copy, verdict);
   if (copy.status !== 'cancelled') copy.status = verdict.status;
   return { ...copy, verdict };
 }
