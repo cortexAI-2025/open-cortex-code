@@ -7,16 +7,20 @@ import { registerAutomationRoutes } from './advanced/automations.js';
 import { registerApiRoutes } from './advanced/network.js';
 import { registerMcpRoutes } from './advanced/mcp.js';
 import { registerAgentDeliveryRoutes } from './advanced/agents-delivery.js';
+import { registerGitPublishRoutes } from './advanced/git-publish.js';
+import { registerMissionRoutes } from './advanced/mission.js';
 
 export { shutdownAdvanced } from './advanced/automations.js';
 
 /** Core installs authenticated pairing/Origin/Host middleware before calling this function. */
 export function registerAdvancedRoutes(app: Express, ctx: ConnectorContext): void {
   registerGitRoutes(app, ctx);
+  registerGitPublishRoutes(app, ctx);
   registerCommandRoutes(app, ctx);
   registerKnowledgeSkillRoutes(app, ctx);
   registerApiRoutes(app, ctx);
   registerMcpRoutes(app, ctx);
   registerAgentDeliveryRoutes(app, ctx);
+  registerMissionRoutes(app, ctx);
   registerAutomationRoutes(app, ctx);
 }

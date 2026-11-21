@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { Project, CortexSession } from '../../shared/contracts.js';
 import { AdvancedError, type Context, aiText, all, confirmed, id, label, now, project, redact, requireProfile, route, trusted, withProjectLock } from './common.js';
 import { gitView } from './git.js';
+import { presentMission, type Mission } from './mission.js';
+import { githubRepositoryFromRemote } from './git-publish.js';
 import { execute, gitOk, githubEnvironment, type StoredCommand } from './process.js';
 
 export interface ParallelAgent { id: string; projectId: string; isolatedProjectId: string; name: string; task: string; profileId: string; mode: 'ask' | 'plan' | 'agent'; branch: string; worktreePath: string; sessionId?: string; state: 'starting' | 'submitted' | 'error'; error?: string; createdAt: string; warning: string }
@@ -51,9 +53,7 @@ export async function githubStatus(ctx: Context, p: Project): Promise<unknown> {
   try { await gh(p, ['--version']); } catch { throw new AdvancedError(503, 'GH_UNAVAILABLE', 'CLI gh absent ou indisponible. Installer/authentifier localement; aucune connexion Manus utilisée.'); }
   try { await gh(p, ['auth', 'status', '--hostname', 'github.com']); } catch { throw new AdvancedError(503, 'GH_AUTH_REQUIRED', 'gh n’est pas authentifié localement sur github.com. Aucun login automatique.'); }
   const remote = (await gitOk(p, ['remote', 'get-url', 'origin'])).trim();
-  const match = /^(?:git@github\.com:|https:\/\/github\.com\/)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?$/.exec(remote);
-  if (!match) throw new AdvancedError(400, 'GH_REPOSITORY_REQUIRED', 'Origin doit identifier un dépôt github.com sans credentials dans l’URL.');
-  const repo = match[1]!;
+  const repo = githubRepositoryFromRemote(remote);
   const [prs, workflows] = await Promise.all([
     gh(p, ['pr', 'list', '--repo', repo, '--limit', '30', '--json', 'number,title,state,url,headRefName,baseRefName']),
     gh(p, ['workflow', 'list', '--repo', repo, '--limit', '30', '--json', 'id,name,state,path']),
@@ -86,12 +86,16 @@ export async function deliveryReport(ctx: Context, p: Project): Promise<unknown>
   }
   const commands = all<StoredCommand>(ctx, 'commands', p.id);
   const tests = commands.filter((c) => c.kind === 'test').map((t) => ({ id: t.id, command: redact(ctx, t.command), exitCode: t.exitCode, signal: t.signal, timedOut: t.timedOut, truncated: t.truncated, durationMs: t.durationMs, createdAt: t.createdAt, output: redact(ctx, t.output), provenance: 'local-command-execution' }));
+  const missionProofs = all<Mission>(ctx, 'missions', p.id).map((mission) => {
+    const view = presentMission(mission);
+    return { id: view.id, title: view.title, status: view.verdict.status, complete: view.verdict.complete, reasons: view.verdict.reasons };
+  });
   const problems: string[] = [];
   if (!view.available) problems.push(view.detail ?? 'Git indisponible.');
   if (view.truncated) problems.push('Le diff/statut dépasse la limite : rapport incomplet.');
   if (!tests.length) problems.push('Aucun test explicitement exécuté via le runner pour ce projet.');
   for (const test of tests) if (test.exitCode !== 0 || test.timedOut || test.truncated) problems.push(`Test ${test.id}: exit=${test.exitCode}; timeout=${test.timedOut}; truncated=${test.truncated}`);
-  return { projectId: p.id, generatedAt: now(), gitAvailable: view.available, branch: view.branch, files, diff: view.diff, tests, problems,
+  return { projectId: p.id, generatedAt: now(), gitAvailable: view.available, branch: view.branch, files, diff: view.diff, tests, missionProofs, problems,
     remaining: ['Pas de merge/push/PR mutative automatique.', 'Pas de build Android/APK ni archive binaire prétendus.', 'Les résultats IA et les services externes exigent un moteur/profil réel.', 'Les worktrees ne sont pas des sandbox OS.'],
     testScope: 'Commandes réellement exécutées avec kind:test sur ce projet; aucune extrapolation E2E.', commandsExecuted: commands.length, fabricatedResults: false };
 }
