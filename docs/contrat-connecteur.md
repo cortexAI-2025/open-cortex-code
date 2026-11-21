@@ -23,6 +23,7 @@ Toutes les routes `/api/*` sauf `/api/health` exigent `Authorization: Bearer <pa
 
 - `GET /api/projects/:id/git` → `{available,branch,status,log:[{hash,message,date}],diff}`.
 - `POST /api/projects/:id/git/branch` `{name,confirm:true}`; `POST /api/projects/:id/git/checkpoint` `{message?,confirm:true}` → checkpoint sans écraser index; `GET /api/projects/:id/git/checkpoints` → checkpoints; `POST /api/projects/:id/git/restore` `{checkpointId,confirm:true}` (sinon refus), fichiers uniquement via validation.
+- `POST /api/projects/:id/git/feature-branch` `{name,confirm:true}` crée et active une branche `cortex/…` (refus de main/master/gh-pages/trunk). `POST /api/projects/:id/git/commit` `{message,paths,confirm:true}` commit local de fichiers réguliers non sensibles, uniquement hors branche protégée, sans push. `POST /api/projects/:id/git/pull-request` `{base,title,body,confirm:true,allowPush:true}` appelle `gh pr create` sans `--force` et sans merge; l’échec gh n’est pas présenté comme une PR ouverte.
 - `POST /api/projects/:id/commands` `{command,confirm:true}` → `CommandResult`; exécution bornée pour projet approuvé uniquement; pas de shell caché derrière Ask. `GET /api/projects/:id/commands` → résultats persistés.
 - `GET /api/projects/:id/knowledge` → documents; `POST` `{name,content}`; `DELETE /:docId` `{confirm:true}`; `GET /api/projects/:id/knowledge/search?q=` → passages `{documentId,name,text,score}[]`.
 - `GET /api/projects/:id/skills` → skills; `POST` `{name,description,content}`; `PUT /:skillId`; `POST /:skillId/export` `{confirm:true}` écrit `.opencode/skills/<name>/SKILL.md` avec paths validés. `POST /api/projects/:id/skills/generate` `{request,profileId}` crée une vraie session si clé disponible.
@@ -30,7 +31,8 @@ Toutes les routes `/api/*` sauf `/api/health` exigent `Authorization: Bearer <pa
 - `GET /api/projects/:id/mcp` → connexions avec statuts réels; `POST` `{name,type:'local'|'remote',command?:string[],url?:string,confirm:true}`; `POST /:name/connect` `{confirm:true}`. Credentials sensibles ne sont pas autorisés dans un JSON public.
 - `GET /api/projects/:id/apis` → configs REST sans secrets; `POST` `{name,baseUrl,method,path,headers?,apiKey?}`; `POST /:apiId/test` `{confirm:true}` avec réseau HTTPS ou loopback explicitement approuvé et méthodes sûres; mutation distante jamais implicite.
 - `GET /api/projects/:id/agents` → sessions tâches worktrees; `POST` `{name,task,profileId,mode,confirm:true}` crée worktree unique avec session propre; pas merge auto.
-- `GET /api/projects/:id/github` → état gh local si installé/auth + PR/workflows read-only. `POST /api/projects/:id/review` `{profileId}` → session d'analyse diff lecture seule; `GET /api/projects/:id/delivery` → résumé machine de fichiers diff, tests vraiment exécutés et problèmes.
+- `GET /api/projects/:id/github` → état gh local si installé/auth + PR/workflows read-only. `POST /api/projects/:id/review` `{profileId}` → session d'analyse diff lecture seule; `GET /api/projects/:id/delivery` → résumé machine de fichiers diff, tests vraiment exécutés, verdicts de missions et problèmes.
+- `GET/POST /api/projects/:id/missions` plan local `{title,goal,profileId,confirm:true}`. `POST …/steps`, `…/claims`, `…/evidence` `{commandId,confirm:true}`, `…/resume` (brief borné, `submitted:false`, aucun appel modèle), `…/cancel`. `verdict.complete` n’est vrai que si les étapes obligatoires sont closes, le dernier test est exit 0 sans timeout ni troncature, et aucun conflit de chemins n’existe.
 
 ## Interface d'intégration backend / avancés
 

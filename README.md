@@ -55,6 +55,8 @@ La suite comporte 86 tests réussis dans la validation rapportée pour la versio
 
 Les profils de modèles acceptent des credentials fournis par l'utilisateur. Aucun appel payant ni test réel des comptes Z.ai, OpenAI, Anthropic, Gemini ou autres n'est garanti. Les intégrations MCP distantes, GitHub OAuth/webhooks, les événements GitHub et l'exécution simultanée de plusieurs générations restent partiels ou non validés; voir les limites dans le guide de [sécurité](docs/securite.md) et le [manuel](docs/utilisation.md).
 
+Le connecteur ajoute un plan de mission local (preuve de test obligatoire, conflits de fichiers entre agents, brief de reprise sans appel modèle) et une publication Git explicite : branche `cortex/…`, commit de chemins listés, pull request via `gh` sans fusion. Ces opérations ne constituent pas un sandbox OS.
+
 ## Licence
 
 Open Cortex Coder est distribué sous licence MIT; voir [`LICENSE`](LICENSE). OpenCode et les autres dépendances restent soumis à leurs licences respectives.

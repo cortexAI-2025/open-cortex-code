@@ -24,7 +24,7 @@ Ask et Plan sont des modes non mutateurs : pas d'édition, pas de commandes arbi
 
 Une demande d'autorisation n'est pas une isolation OS. Le shell, les scripts de dépendances et les outils locaux ont les droits du compte exécutant le moteur. Un dépôt approuvé peut exécuter un script malveillant; une commande de test n'est pas intrinsèquement sûre. **Les dépôts non fiables ne sont pas exécutés sans environnement isolé externe.** Les worktrees séparent branches/fichiers, pas le réseau, les processus ou les secrets.
 
-Les opérations Git destructives, le push, le merge, les PR et les mutations de services externes doivent être explicites et autorisées. Les tests de connectivité REST utilisent des méthodes de lecture. Un GET d'un service mal conçu peut avoir des effets : utiliser uniquement des endpoints connus et autorisés. Aucun serveur externe prédéfini n'est considéré connecté par sa seule présence dans un formulaire.
+Les opérations Git destructives, le push, le merge, les PR et les mutations de services externes doivent être explicites et autorisées. La publication ajoutée refuse les branches protégées (`main`, `master`, `gh-pages`, `trunk`), n’injecte pas d’identité Git fictive, ne commit pas de chemins sensibles, et n’émet jamais `merge` ni `--force`. `gh pr create` n’est appelé qu’avec `confirm:true` et `allowPush:true`; un échec n’est pas converti en succès. Les tests de connectivité REST utilisent des méthodes de lecture. Un GET d'un service mal conçu peut avoir des effets : utiliser uniquement des endpoints connus et autorisés. Aucun serveur externe prédéfini n'est considéré connecté par sa seule présence dans un formulaire.
 
 ## Pairing facultatif depuis une interface HTTPS
 

@@ -4,6 +4,7 @@ import type { AgentMode, CortexSession } from '../../shared/contracts';
 import { dateLabel, projectRoute, useResource } from '../api';
 import { useConnection, useBootstrap, useWorkspace, useAgent, useNavigationActions, useAppActions } from '../state';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
+import { MissionBoard } from '../components/MissionBoard';
 interface ParallelAgent {
     id: string;
     isolatedProjectId: string;
@@ -54,5 +55,6 @@ export function Agents() {
         return; setBusy(true); await act(async () => { const value = await api.request(projectRoute(projectId, 'agents'), 'POST', { name, task, profileId: profile, mode, confirm: true }); await refresh(); return value; }, 'Tâche worktree créée. Les résultats sont à examiner, pas présumés terminés.'); agents.refresh(); setBusy(false); }}>
       <Field label="Nom de la tâche"><input required value={name} onChange={e => setName(e.target.value)}/></Field><Field label="Mission"><textarea required className="text-editor" value={task} onChange={e => setTask(e.target.value)}/></Field><Field label="Profil BYOK"><select required value={profile} onChange={e => setProfile(e.target.value)}><option value="">Choisir un profil</option>{bootstrap?.profiles.map(p => <option key={p.id} value={p.id}>{p.name} · {p.modelId}</option>)}</select></Field><Field label="Mode"><select value={mode} onChange={e => setTaskMode(e.target.value as AgentMode)}><option value="ask">Ask</option><option value="plan">Plan</option><option value="agent">Agent (permissions requises)</option></select></Field><button className="primary" disabled={busy || !project?.trusted || !profile}><Play size={14}/>Créer & lancer la tâche</button>{!project?.trusted && <p className="small">Le projet doit être explicitement approuvé pour cette opération Git et moteur.</p>}
     </form></section></div>
+    <MissionBoard />
   </div>;
 }
