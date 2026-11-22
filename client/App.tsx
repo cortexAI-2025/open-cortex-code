@@ -1,5 +1,5 @@
 import { lazy, memo, Suspense, useMemo, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import { LayoutDashboard, FolderOpen, Code2, MessagesSquare, GitFork, KeyRound, Plug, WandSparkles, CalendarClock, Brain, History, PackageCheck, Settings as SettingsIcon, Sun, Moon, Menu, PanelRight, X, Shield, ChevronRight, Radio } from 'lucide-react';
+import { LayoutDashboard, FolderOpen, Code2, MessagesSquare, GitFork, KeyRound, Plug, WandSparkles, CalendarClock, Brain, History, PackageCheck, Users, Settings as SettingsIcon, Sun, Moon, Menu, PanelRight, X, Shield, ChevronRight, Radio } from 'lucide-react';
 import { useConnection, useBootstrap, useWorkspace, useAgent, useNavigation, useNavigationActions, useNotice, useAppActions, viewLabels, type View } from './state';
 import { Brand, ProjectGate } from './components/ui';
 import { AgentPanel } from './components/AgentPanel';
@@ -10,6 +10,7 @@ import { Projects } from './views/Projects';
 import { Sessions } from './views/Sessions';
 import { Agents } from './views/Agents';
 import { Reports } from './views/Reports';
+import { Team } from './views/Team';
 type LazyViewModule<P extends object> = { default: ComponentType<P> };
 function lazyView<P extends object = {}>(importView: () => Promise<LazyViewModule<P>>, label: string) {
     return lazy(async (): Promise<LazyViewModule<P>> => {
@@ -41,7 +42,7 @@ const NoticeBanner = memo(function NoticeBanner() {
 const navigation = [
     { id: 'dashboard', icon: LayoutDashboard }, { id: 'projects', icon: FolderOpen }, { id: 'editor', icon: Code2 }, { id: 'sessions', icon: MessagesSquare },
     { id: 'agents', icon: GitFork }, { id: 'models', icon: KeyRound }, { id: 'integrations', icon: Plug }, { id: 'skills', icon: WandSparkles },
-    { id: 'automations', icon: CalendarClock }, { id: 'memory', icon: Brain }, { id: 'history', icon: History }, { id: 'delivery', icon: PackageCheck },
+    { id: 'automations', icon: CalendarClock }, { id: 'memory', icon: Brain }, { id: 'history', icon: History }, { id: 'delivery', icon: PackageCheck }, { id: 'team', icon: Users },
 ] as const;
 function App() {
     const { connected } = useConnection();
@@ -68,6 +69,7 @@ function App() {
             case 'memory': return <ViewLoading><ProjectGate><Memory /></ProjectGate></ViewLoading>;
             case 'history': return <ProjectGate><Reports /></ProjectGate>;
             case 'delivery': return <ProjectGate><Reports delivery/></ProjectGate>;
+            case 'team': return <ProjectGate><Team /></ProjectGate>;
             case 'settings': return <ViewLoading><Settings theme={theme} setTheme={setTheme} width={agentWidth} setWidth={setAgentWidth}/></ViewLoading>;
             case 'editor': return null;
         }

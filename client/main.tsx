@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import './responsive.css';
+import './team.css';
 import App from './App';
 import { AppProvider } from './state';
 import { PRODUCT_NAME } from './config';

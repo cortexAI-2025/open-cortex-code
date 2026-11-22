@@ -1,0 +1,10 @@
+[12:10:28] projet ouvert: ee5ec1b5-3948-4c36-b86f-9d5a2d28d106 (trusted=true)
+[12:10:28] équipe: connexion=connected accès=owner runtime=READY isolation=bubblewrap-namespaces certifiée=false
+[12:10:28] runtime checks: linux=true node=true claude_cli=true bubblewrap_isolation=true
+[12:10:28] agents: architect:idle backend:idle qa:idle security:idle
+[12:10:28] superviseur enregistré: true
+[12:10:28] mission créée: a4f52465-3937-4e0a-86b5-f05fb39f7869 -> CTO dbcaf2c3-c1ca-441e-9628-ae1893606700; status=pending_approval pending=[mission] spent=0 blockers=[] tasks=architect:queued,backend:waiting,qa:waiting,security:waiting
+[12:10:28] approbation 'mission' transmise via Open Cortex -> architecte démarre (Claude réel)
+[12:10:49] status=awaiting_owner pending=[architecture] spent=0.219988 blockers=[] tasks=architect:done,backend:waiting,qa:waiting,security:waiting
+[12:11:04] approbation 'architecture' transmise -> backend (Claude réel, écrit du code), puis tests CTO, puis QA ∥ Sécurité
+[12:11:40] status=review pending=[completion] spent=0.581357 blockers=[] tasks=architect:done,backend:done,qa:done,security:done
