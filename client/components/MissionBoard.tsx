@@ -17,6 +17,11 @@ interface MissionView {
   evidence: { command: string; exitCode: number | null; timedOut?: boolean; truncated?: boolean }[];
   repairs?: { index: number; exitCode: number | null; diagnosis: string; applied: string[]; stopped?: string; model?: string; sessionId?: string; invoked?: boolean; budgetMs?: number; tokens?: { input: number; output: number } }[];
   profileId?: string;
+  testPolicy?: string;
+  summary?: string;
+  plan?: { id: string; role: string; title: string; status: string }[];
+  roles?: { role: string; summary: string }[];
+  permissions?: { action: string; resources: string[]; decision: string }[];
 }
 interface ResumeResult { brief: string; estimatedTokens: number; submitted: false; truncated: boolean }
 
@@ -35,6 +40,7 @@ export function MissionBoard() {
   const [patchPath, setPatchPath] = useState('');
   const [patchBefore, setPatchBefore] = useState('');
   const [patchAfter, setPatchAfter] = useState('');
+  const [testPolicy, setTestPolicy] = useState<'deny' | 'create' | 'adapt'>('deny');
   const [brief, setBrief] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -53,11 +59,16 @@ export function MissionBoard() {
       const last = mission.repairs?.at(-1);
       const profileName = bootstrap?.profiles.find((item) => item.id === mission.profileId)?.name;
       const touched = [...new Set(mission.repairs?.flatMap((item) => item.applied) ?? [])];
+      const tokens = (mission.repairs ?? []).reduce((sum, item) => ({ input: sum.input + (item.tokens?.input ?? 0), output: sum.output + (item.tokens?.output ?? 0) }), { input: 0, output: 0 });
+      const active = [...(mission.roles ?? [])].reverse().find((item) => item.role === 'coder') ?? mission.roles?.at(-1);
       return <article key={mission.id} className="agent-record"><div className="panel-title"><h3>{mission.title}</h3><span className="badge">{mission.verdict.label || mission.verdict.status}</span></div>
       <p>{mission.goal}</p>
-      <p className="small">Verdict : {mission.verdict.label || (mission.verdict.complete ? 'PROVEN' : 'non prouvé')} · {mission.evidence.length} test(s) · tentative {last?.index ?? 0}/3</p>
-      <p className="small">Agent : {last?.invoked ? `OpenCode mode Agent${last.model ? ` · ${last.model}` : ''}${profileName ? ` · profil ${profileName}` : ''}${last.sessionId ? ` · session ${last.sessionId}` : ''}` : 'moteur non appelé'}</p>
-      <p className="small">Fichiers modifiés par la boucle : {touched.join(', ') || 'aucun'}{last?.budgetMs ? ` · budget ${last.budgetMs} ms` : ''}{last?.tokens ? ` · tokens ${last.tokens.input}/${last.tokens.output}` : ''}</p>
+      <p className="small">Verdict : {mission.verdict.label || (mission.verdict.complete ? 'PROVEN' : 'non prouvé')} · {mission.evidence.length} test(s) · tentative {last?.index ?? 0}/3 · politique tests {mission.testPolicy || 'deny'}</p>
+      <p className="small">Agent actif : {active ? `${active.role}${last?.model ? ` · ${last.model}` : ''}` : 'aucun'}{last?.invoked ? ` · OpenCode${profileName ? ` · ${profileName}` : ''}${last.sessionId ? ` · ${last.sessionId}` : ''}` : ' · moteur non appelé'}</p>
+      <p className="small">Fichiers modifiés : {touched.join(', ') || 'aucun'} · jetons mission {tokens.input}/{tokens.output}{last?.budgetMs ? ` · budget ${last.budgetMs} ms` : ''}</p>
+      {mission.plan && mission.plan.length > 0 && <p className="small">Plan : {mission.plan.map((item) => `${item.role} ${item.status}`).join(' · ')}</p>}
+      {mission.permissions && mission.permissions.length > 0 && <p className="small">Permissions : {mission.permissions.map((item) => `${item.decision} ${item.action} ${item.resources.join(', ')}`).join(' · ')}</p>}
+      {mission.summary && <pre className="result-json">{mission.summary}</pre>}
       <ul className="delivery-limits">{mission.verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
       {mission.evidence.map((item, index) => <p className="small" key={`${item.command}-${index}`}>Test {index + 1} : exit {item.exitCode ?? 'absent'} · {item.command}</p>)}
       {mission.repairs?.map((repair, index) => <p className="small" key={`${repair.index}-${index}`}>Tentative {repair.index}/3 : exit {repair.exitCode ?? 'absent'} · {repair.stopped || 'correctif non encore revérifié'}{repair.applied.length ? ` · ${repair.applied.join(', ')}` : ''}</p>)}
@@ -68,7 +79,8 @@ export function MissionBoard() {
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void post(`missions/${mission.id}/evidence`, { commandId }, 'Joindre cette commande comme preuve ?', 'Seule une commande déjà exécutée avec kind:test est acceptée. Un exit non nul laisse la mission ouverte.'); }}><input aria-label="Identifiant de commande de test" value={commandId} onChange={(event) => setCommandId(event.target.value)} placeholder="Identifiant de commande kind:test" required/><button className="secondary" disabled={busy}>Joindre la preuve</button></form>
       <button className="secondary" disabled={busy} onClick={async () => { if (!api) return; setBusy(true); const result = await act(() => api.request<ResumeResult>(projectRoute(projectId, `missions/${mission.id}/resume`), 'POST', { budgetTokens: 1200 })); if (result) setBrief(result.brief); missions.refresh(); setBusy(false); }}>Préparer un brief de reprise (sans appel modèle)</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/claims/sync`, {}, 'Déduire les revendications des worktrees ?', 'Les modifications, ajouts, suppressions et renommages Git de chaque agent remplacent les revendications. Un conflit bloque la preuve. Aucune fusion.')}>Synchroniser les fichiers depuis les worktrees</button>
-      <button className="primary" disabled={busy} onClick={() => void post(`missions/${mission.id}/agent`, { command: testCommand, maxAttempts: 3, budgetMs: 180000 }, 'Lancer le mode Agent OpenCode ?', 'Aucun fragment avant/après n’est envoyé. OpenCode peut modifier seulement les fichiers revendiqués, avec une permission once. Trois tentatives, puis les tests du connecteur tranchent. Sans modèle joignable, la mission reste BLOCKED.')}>Corriger avec OpenCode (mode Agent)</button>
+      <label className="small">Politique de test <select aria-label="Politique de test" value={testPolicy} onChange={(event) => setTestPolicy(event.target.value as 'deny' | 'create' | 'adapt')}><option value="deny">Interdire les tests</option><option value="create">Créer de nouveaux tests</option><option value="adapt">Adapter sans affaiblir</option></select></label>
+      <button className="primary" disabled={busy} onClick={() => void post(`missions/${mission.id}/agent`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy }, 'Lancer le mode Agent OpenCode ?', 'Aucun fragment avant/après n’est envoyé. La branche courante ne doit pas être main. OpenCode peut modifier le périmètre revendiqué, avec une permission once. Les tests existants restent protégés selon la politique choisie. Trois tentatives au plus, puis les tests du connecteur tranchent. Sans modèle joignable, la mission reste BLOCKED.')}>Corriger avec OpenCode (mode Agent)</button>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const patches = patchPath && patchBefore ? [{ path: patchPath, before: patchBefore, after: patchAfter }] : []; void post(`missions/${mission.id}/repair`, { command: testCommand, maxAttempts: 3, patches }, 'Appliquer un correctif manuel hors moteur ?', 'Ce formulaire n’appelle pas OpenCode. Il reste un filet de secours. Un correctif de test est refusé.'); }}><input aria-label="Commande de test" value={testCommand} onChange={(event) => setTestCommand(event.target.value)} required/><input aria-label="Fichier du correctif" value={patchPath} onChange={(event) => setPatchPath(event.target.value)} placeholder="src/fichier.js"/><input aria-label="Fragment à remplacer" value={patchBefore} onChange={(event) => setPatchBefore(event.target.value)} placeholder="fragment exact"/><input aria-label="Fragment corrigé" value={patchAfter} onChange={(event) => setPatchAfter(event.target.value)} placeholder="remplacement"/><button className="secondary" type="submit" disabled={busy}>Correctif manuel hors moteur</button></form>
     </article>;
     })}

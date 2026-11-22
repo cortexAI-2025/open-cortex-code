@@ -67,7 +67,7 @@ export interface PublishRecord {
   files: string[];
   pushed: boolean;
   url: string | null;
-  phase: 'commit' | 'push' | 'pull-request' | 'failed';
+  phase: 'commit' | 'push' | 'pull-request' | 'prepare' | 'failed';
   detail: string;
   remoteCertified: false;
   createdAt: string;
@@ -236,6 +236,36 @@ export async function openPullRequest(ctx: Context, p: Project, input: unknown, 
   });
 }
 
+/** Plan local de pull request. N’appelle pas gh, ne pousse pas, ne fusionne pas. */
+export async function preparePullRequest(ctx: Context, p: Project, input: unknown, run?: CommandRunner): Promise<{ ok: true; published: false; merged: false; forced: false; remoteCertified: false; plan: { repo: string | null; base: string; head: string; title: string; body: string; argv: string[] | null } }> {
+  confirmed(input); trusted(p);
+  const body = z.object({
+    base: z.string().trim().min(1).max(200).default('main'),
+    title: label.optional(),
+    body: z.string().trim().min(1).max(16_000).optional(),
+    confirm: z.literal(true),
+  }).strict().parse(input);
+  void run;
+  return withProjectLock(p.id, async () => {
+    trusted(ctx.project(p.id));
+    const head = assertFeatureBranch(await currentBranch(p));
+    if (!provenMissionExists(ctx, p)) throw new AdvancedError(409, 'MISSION_NOT_PROVEN', 'Une mission du projet est ouverte et aucune n’est prouvée. Pas de préparation de pull request.');
+    const proven = all<Mission>(ctx, 'missions', p.id).map((mission) => presentMission(mission)).find((mission) => mission.verdict.complete);
+    const title = (body.title ?? proven?.title ?? 'Mission locale').trim().slice(0, 200);
+    const text = (body.body ?? proven?.summary ?? 'Preuve locale uniquement. Cette préparation ne publie rien et ne pousse pas.').trim().slice(0, 16_000);
+    if (!title || !text) throw new AdvancedError(400, 'INVALID_PR', 'Titre ou corps de PR vide.');
+    let repo: string | null = null;
+    const remote = await git(p, ['remote', 'get-url', 'origin']);
+    if (remote.exitCode === 0 && !remote.timedOut && !remote.truncated && remote.output.trim()) {
+      try { repo = githubRepositoryFromRemote(remote.output.trim()); } catch { repo = null; }
+    }
+    const argv = repo ? buildPullRequestArgs({ repo, base: body.base, head, title, body: text }) : null;
+    remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url: null, phase: 'prepare', message: title, detail: argv ? `${head} → ${body.base}; plan local, gh non appelé.` : `${head} → ${body.base}; origin absent, gh non appelé.` });
+    ctx.history(p.id, 'pull-request-plan', 'Pull request préparée sans publication', `${head} → ${body.base}; published=false`);
+    return { ok: true, published: false, merged: false, forced: false, remoteCertified: false, plan: { repo, base: assertBranchToken(body.base), head, title, body: text, argv } };
+  });
+}
+
 export async function publishStatus(ctx: Context, p: Project): Promise<{ currentBranch: string; headFiles: string[]; latest: PublishRecord | null; remoteCertified: false }> {
   const latest = all<PublishRecord>(ctx, 'publish-log', p.id).at(-1) ?? null;
   try {
@@ -252,5 +282,6 @@ export function registerGitPublishRoutes(app: Express, ctx: Context): void {
   app.post('/api/projects/:id/git/feature-branch', route(ctx, async (req, res) => res.status(201).json(await createAndCheckoutFeatureBranch(ctx, project(ctx, req), req.body))));
   app.post('/api/projects/:id/git/commit', route(ctx, async (req, res) => res.status(201).json(await commitPaths(ctx, project(ctx, req), req.body))));
   app.post('/api/projects/:id/git/push', route(ctx, async (req, res) => res.json(await pushFeatureBranch(ctx, project(ctx, req), req.body))));
+  app.post('/api/projects/:id/git/pull-request/prepare', route(ctx, async (req, res) => res.json(await preparePullRequest(ctx, project(ctx, req), req.body))));
   app.post('/api/projects/:id/git/pull-request', route(ctx, async (req, res) => res.status(201).json({ ...await openPullRequest(ctx, project(ctx, req), req.body), createdAt: now() })));
 }

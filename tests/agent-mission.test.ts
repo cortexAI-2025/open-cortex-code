@@ -25,6 +25,7 @@ describe('permissions du mode Agent', () => {
     expect(authorizeMissionAction('edit', ['../secret.js'], claims, projectPath)).toBe('reject');
     expect(authorizeMissionAction('edit', [`${projectPath}/.env`], claims, projectPath)).toBe('reject');
     expect(authorizeMissionAction('edit', ['tests/app.test.js'], [{ agentId: 'agent', paths: ['tests/app.test.js'] }], projectPath)).toBe('reject');
+    expect(authorizeMissionAction('write', ['tests/new.test.js'], [{ agentId: 'agent', paths: ['tests'] }], projectPath, 'create')).toBe('once');
     expect(authorizeMissionAction('edit', ['src/other.js'], claims, projectPath)).toBe('reject');
     expect(authorizeMissionAction('shell', ['node --test'], claims, projectPath)).toBe('reject');
     expect(authorizeMissionAction('shell', ['git push origin main'], claims, projectPath)).toBe('reject');
@@ -74,6 +75,7 @@ describe('boucle Agent, tests locaux réels, moteur simulé ou absent', () => {
     await writeFile(path.join(projectPath, 'src', 'app.js'), 'export const value = 1;\n');
     await gitOk(project, ['add', '.']);
     await gitOk(project, ['commit', '-m', 'init']);
+    await gitOk(project, ['switch', '-c', 'cortex/fixture']);
   }
 
   afterEach(() => store?.close());

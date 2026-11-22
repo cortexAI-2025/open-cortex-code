@@ -60,6 +60,7 @@ export function GitPanel() {
     const [prTitle, setPrTitle] = useState('');
     const [prBody, setPrBody] = useState('');
     const [prBase, setPrBase] = useState('main');
+    const [prepared, setPrepared] = useState('');
     const [busy, setBusy] = useState(false);
     const [preview, setPreview] = useState<RestorePreview | null>(null);
     const git = useResource<GitState>(api, projectId ? projectRoute(projectId, 'git') : null);
@@ -119,6 +120,15 @@ export function GitPanel() {
       <input aria-label="Titre de pull request" value={prTitle} onChange={e => setPrTitle(e.target.value)} placeholder="Titre de la pull request"/>
       <input aria-label="Branche de base" value={prBase} onChange={e => setPrBase(e.target.value)} placeholder="Base, ex. main"/>
       <textarea className="text-editor" aria-label="Corps de pull request" value={prBody} onChange={e => setPrBody(e.target.value)} placeholder="Corps : preuves, limites, pas de fusion."/>
+      <button className="secondary" type="button" disabled={busy} onClick={async () => {
+        if (!api || !projectId || !await confirm('Préparer la pull request sans la publier ?', 'Aucun appel gh, aucun push, aucune fusion. Le plan reste local. La publication exige ensuite une confirmation séparée.')) return;
+        setBusy(true);
+        const result = await act(() => api.request<Record<string, unknown>>(projectRoute(projectId, 'git/pull-request/prepare'), 'POST', { confirm: true, base: prBase || 'main', ...(prTitle ? { title: prTitle } : {}), ...(prBody ? { body: prBody } : {}) }));
+        if (result) setPrepared(JSON.stringify(result, null, 2));
+        publish.refresh();
+        setBusy(false);
+      }}>Préparer la PR sans la publier</button>
+      {prepared && <pre className="result-json">{prepared}</pre>}
       <button className="secondary" type="button" disabled={busy || !prTitle || !prBody} onClick={() => void mutate('git/pull-request', { base: prBase || 'main', title: prTitle, body: prBody, allowPush: true }, 'Ouvrir une pull request ?', 'Le HEAD local doit déjà être sur origin via le push confirmé. gh pr create ne fusionne pas et ne force pas. Un échec d’authentification n’ouvre aucune PR.')}>Ouvrir la PR, sans la fusionner</button>
     </form>}
   </div>;

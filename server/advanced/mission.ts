@@ -46,9 +46,19 @@ export interface Mission {
   updatedAt: string;
   resumeCount: number;
   agentSessionId?: string;
+  testPolicy?: TestPolicy;
+  plan?: MissionPlanItem[];
+  roles?: RoleTrace[];
+  permissions?: MissionPermission[];
+  summary?: string;
 }
 export interface MissionVerdict { complete: boolean; status: MissionStatus; reasons: string[]; label?: MissionLabel }
 export type MissionLabel = 'PROVEN' | 'FAILED' | 'BLOCKED' | 'CANCELLED' | 'IN_PROGRESS';
+export type TestPolicy = 'deny' | 'create' | 'adapt';
+export type MissionRole = 'orchestrator' | 'planner' | 'coder' | 'tester' | 'reviewer';
+export interface MissionPlanItem { id: string; role: MissionRole; title: string; status: 'pending' | 'done' | 'skipped' }
+export interface RoleTrace { role: MissionRole; summary: string; at: string }
+export interface MissionPermission { action: string; resources: string[]; decision: 'once' | 'reject'; createdAt: string }
 
 export function missionLabel(mission: Pick<Mission, 'repairs'>, verdict: MissionVerdict): MissionLabel {
   if (verdict.status === 'cancelled') return 'CANCELLED';
@@ -98,6 +108,9 @@ export function presentMission(mission: Mission): Mission & { verdict: MissionVe
     conflicts: mission.conflicts.map((conflict) => ({ path: conflict.path, agents: [...conflict.agents] })),
     evidence: mission.evidence.map((item) => ({ ...item })),
     repairs: (mission.repairs ?? []).map((item) => ({ ...item, files: [...item.files], applied: [...item.applied], rejected: [...item.rejected], tokens: item.tokens ? { ...item.tokens } : undefined })),
+    plan: mission.plan?.map((item) => ({ ...item })),
+    roles: mission.roles?.map((item) => ({ ...item })),
+    permissions: mission.permissions?.map((item) => ({ ...item, resources: [...item.resources] })),
   };
   if (copy.status !== 'cancelled') syncTestStep(copy);
   const verdict = { ...completionVerdict(copy), label: undefined as MissionLabel | undefined };
@@ -116,6 +129,31 @@ function save(ctx: Context, mission: Mission): Mission & { verdict: MissionVerdi
 
 export function storeMission(ctx: Context, mission: Mission): Mission & { verdict: MissionVerdict } {
   return save(ctx, mission);
+}
+
+export function buildMissionPlan(): MissionPlanItem[] {
+  return [
+    { id: id(), role: 'planner', title: 'Carte du dépôt et périmètre autorisé', status: 'pending' },
+    { id: id(), role: 'coder', title: 'Modifier les fichiers du périmètre via OpenCode', status: 'pending' },
+    { id: id(), role: 'tester', title: 'Exécuter le test réel du connecteur', status: 'pending' },
+    { id: id(), role: 'reviewer', title: 'Contrôler le diff sans se fier au récit du modèle', status: 'pending' },
+    { id: id(), role: 'orchestrator', title: 'Trancher uniquement d’après le dernier test', status: 'pending' },
+  ];
+}
+
+export function summarizeMission(mission: Pick<Mission, 'repairs' | 'evidence' | 'permissions' | 'testPolicy'>): string {
+  const files = [...new Set((mission.repairs ?? []).flatMap((item) => item.applied))];
+  const tokens = (mission.repairs ?? []).reduce((sum, item) => ({ input: sum.input + (item.tokens?.input ?? 0), output: sum.output + (item.tokens?.output ?? 0) }), { input: 0, output: 0 });
+  const latest = mission.evidence.at(-1);
+  const permissions = (mission.permissions ?? []).map((item) => `${item.decision} ${item.action} ${item.resources.join(', ')}`).join(' ; ');
+  return [
+    `Fichiers gardés : ${files.join(', ') || 'aucun'}.`,
+    `Dernier test : exit ${latest ? latest.exitCode : 'absent'}, timeout=${latest?.timedOut ?? false}, tronqué=${latest?.truncated ?? false}.`,
+    `Tentatives : ${mission.repairs?.length ?? 0}. Politique de test : ${mission.testPolicy ?? 'deny'}.`,
+    `Jetons additionnés : ${tokens.input} entrée / ${tokens.output} sortie. Ce n’est pas une facture fournisseur.`,
+    `Permissions : ${permissions || 'aucune'}.`,
+    'Le succès n’est pas déclaré par le modèle.',
+  ].join('\n');
 }
 
 export function suggestBranch(title: string, unique: string): string {
