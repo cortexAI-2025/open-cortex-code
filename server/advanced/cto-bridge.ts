@@ -112,9 +112,9 @@ function reportView(raw: RawReport): NonNullable<CtoMissionView['report']> {
 }
 
 /** Les tests d'acceptation du propriétaire restent côté serveur (retransmission après reprise) et ne sont pas renvoyés au navigateur. */
-const publicJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, item: unknown) => key === 'acceptanceTests' ? undefined : item)) as unknown;
+const publicJson = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, item: unknown) => key === 'ownerAcceptance' ? undefined : item)) as unknown;
 
-type StoredLink = CtoMissionLink & { acceptanceTests?: Record<string, string> };
+type StoredLink = CtoMissionLink & { ownerAcceptance?: Record<string, string> };
 function link(ctx: Context, projectId: string, linkId: string): StoredLink { return owned<StoredLink>(ctx, KIND, linkId, projectId); }
 function save<T extends StoredLink>(ctx: Context, value: T): T { return ctx.store.put(KIND, { ...value, updatedAt: now() }, value.projectId); }
 function failure(error: unknown): { code: string; message: string; at: string } {
@@ -276,13 +276,13 @@ export function registerCtoBridgeRoutes(app: Express, ctx: Context): void {
       await assertRunnable(ctx, p.path);
       const draft: StoredLink = {
         id: linkId, projectId: p.id, repo: input.repo, objective: input.objective, acceptanceCriteria: input.acceptanceCriteria, scope: input.scope, budgetUsd: input.budgetUsd,
-        ...(input.acceptanceTests ? { acceptanceTests: input.acceptanceTests } : {}),
+        ...(input.acceptanceTests ? { ownerAcceptance: input.acceptanceTests } : {}),
         localState: 'submitting', status: 'submitting', pendingApprovals: [], blockers: [], spentUsd: 0, estimatedUsd: 0, createdAt: now(), updatedAt: now(),
       };
       composeObjective(draft);
       save(ctx, draft); // persisté AVANT l'envoi : une coupure réseau laisse une trace reprenable, jamais un doublon
       ctx.history(p.id, 'cto-mission', 'Mission transmise au CTO IA', `${linkId} · ${input.repo} · budget ${input.budgetUsd} USD`);
-      try { return { link: await submit(ctx, draft, draft.acceptanceTests), replay: false }; }
+      try { return { link: await submit(ctx, draft, draft.ownerAcceptance), replay: false }; }
       catch (error) {
         save(ctx, { ...draft, lastError: failure(error) });
         const e = error as AdvancedError;
@@ -339,7 +339,7 @@ export function registerCtoBridgeRoutes(app: Express, ctx: Context): void {
         // Réconciliation avant tout renvoi : si le CTO l'a déjà acceptée, on la rattache, on ne la recrée pas.
         const found = await lookup(ctx, l.id);
         if (found) l = save(ctx, applyMission({ ...l, localState: 'linked', ctoMissionId: found.id }, found));
-        else { await assertRunnable(ctx, p.path); l = await submit(ctx, l, l.acceptanceTests); }
+        else { await assertRunnable(ctx, p.path); l = await submit(ctx, l, l.ownerAcceptance); }
       } else {
         const current = await cto<CtoMission>(ctx, 'GET', `/api/missions/${l.ctoMissionId}`);
         if (current.status === 'blocked') await cto(ctx, 'POST', `/api/missions/${l.ctoMissionId}/resume`, {});

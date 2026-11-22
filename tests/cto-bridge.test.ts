@@ -71,7 +71,7 @@ class FakeCto {
     const action = match[2];
     if (!action) return this.send(res, 200, m);
     if (action === 'events') return this.send(res, 200, this.events.filter((e) => e.mission_id === m.id));
-    if (action === 'report') return this.send(res, 200, { mission: { id: m.id, status: m.status, budget_usd: m.budget_usd, spent_usd: m.spent_usd }, cost_by_role: { architect: 0.05 }, reviews: [], pending_approvals: ({ pending_approval: ['mission'], awaiting_owner: ['architecture'], review: ['completion'] } as Record<string, string[]>)[m.status] ?? [], git: m.git ?? null, tests: null, acceptance_tests: null, pull_request_body: '## Objective', corrections_requested: 0, rework_rounds: 0 });
+    if (action === 'report') return this.send(res, 200, { mission: { id: m.id, status: m.status, budget_usd: m.budget_usd, spent_usd: m.spent_usd }, cost_by_role: { architect: 0.05 }, reviews: [], pending_approvals: ({ pending_approval: ['mission'], awaiting_owner: ['architecture'], review: ['completion'] } as Record<string, string[]>)[m.status] ?? [], git: m.git ?? null, tests: { passed: 10, failed: 0 }, acceptance_tests: { passed: 8, failed: 0 }, pull_request_body: '## Objective', corrections_requested: 0, rework_rounds: 0 });
     if (action === 'approvals') {
       const need = { pending_approval: 'mission', awaiting_owner: 'architecture', review: 'completion' }[m.status as string];
       if (need !== body.kind) return this.send(res, 400, { error: `Cannot record a ${body.kind} approval while the mission is ${m.status}` });
@@ -310,11 +310,14 @@ describe('approbations humaines et annulation', () => {
     expect(fake.missions).toHaveLength(0);
   });
   it('rapport : preuves Git et coûts remontent, sans présenter de push ni de fusion', async () => {
-    const { link } = (await api('POST', P(), newMission())).body;
+    const { link } = (await api('POST', P(), newMission({ acceptanceTests: { 'a.test.js': 'secret-owner-test' } }))).body;
     fake.missions[0]!.git = { branch: 'cto/abcd1234/backend-ef567890', commit: 'a'.repeat(40), base_commit: 'b'.repeat(40), files: ['src/slug.js'], diffstat: ' 1 file changed', pushed: false, merged: false };
     const view = (await api('GET', `${P()}/${link.id}`)).body;
+    expect(JSON.stringify(view)).not.toContain('secret-owner-test'); expect(fake.missions[0]!.acceptance).toEqual({ 'a.test.js': 'secret-owner-test' });
     expect(view.report.git).toMatchObject({ branch: 'cto/abcd1234/backend-ef567890', files: ['src/slug.js'], pushed: false, merged: false });
     expect(view.report.costByRole).toEqual({ architect: 0.05 });
+    expect(view.report.tests).toEqual({ passed: 10, failed: 0 });
+    expect(view.report.acceptanceTests).toEqual({ passed: 8, failed: 0 }); // régression : ne doit pas être filtré avec les tests du propriétaire
   });
 });
 
