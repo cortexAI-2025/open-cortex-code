@@ -95,6 +95,8 @@ export function Team() {
     const [budget, setBudget] = useState('3');
     const [criteria, setCriteria] = useState('');
     const [scope, setScope] = useState('');
+    const [accName, setAccName] = useState('acceptance.test.js');
+    const [accTests, setAccTests] = useState('');
     const [busy, setBusy] = useState(false);
     const key = useRef(crypto.randomUUID());
     const sup = team.data?.supervisor;
@@ -116,10 +118,10 @@ export function Team() {
         setBusy(true);
         const created = await act(() => api.request<CtoMissionView>(projectRoute(projectId, 'cto/missions'), 'POST', {
             idempotencyKey: key.current, repo, objective, budgetUsd: Number(budget),
-            acceptanceCriteria: criteria.split('\n').map(line => line.trim()).filter(Boolean), scope: scope.split(/[\s,]+/).filter(Boolean), confirm: true,
+            acceptanceCriteria: criteria.split('\n').map(line => line.trim()).filter(Boolean), scope: scope.split(/[\s,]+/).filter(Boolean), ...(accTests.trim() ? { acceptanceTests: { [accName.trim()]: accTests } } : {}), confirm: true,
         }), 'Mission transmise au CTO IA.');
         setBusy(false);
-        if (created) { setSelected(created.link.id); setObjective(''); setCriteria(''); key.current = crypto.randomUUID(); }
+        if (created) { setSelected(created.link.id); setObjective(''); setCriteria(''); setAccTests(''); key.current = crypto.randomUUID(); }
         missions.refresh();
     };
 
@@ -143,9 +145,10 @@ export function Team() {
       <section className="form-panel"><h3>Nouvelle mission</h3>
         {(!connected || blocked) && <div className="error-box" role="alert"><ShieldAlert size={16}/><span>{!connected ? 'CTO IA non connecté : création impossible.' : `BLOCKED : ${runtime!.blockers.join(' · ') || 'isolation non vérifiée'}. Aucune exécution ne sera simulée.`}</span></div>}
         <form onSubmit={e => { e.preventDefault(); void create(); }}>
-          <Field label="Dépôt (propriétaire/nom)" hint="Libellé GitHub de la PR préparée. Le CTO travaille sur le dépôt local de ce projet."><input required value={repo} pattern="[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+" onChange={e => setRepo(e.target.value)} placeholder="AiWorkPay-SASU/mon-depot"/></Field>
+          <Field label="Dépôt (propriétaire/nom)" hint="Libellé GitHub de la PR préparée. Le CTO travaille sur le dépôt local de ce projet."><input required value={repo} pattern="[A-Za-z0-9][A-Za-z0-9\-]*/[A-Za-z0-9_.\-]+" onChange={e => setRepo(e.target.value)} placeholder="AiWorkPay-SASU/mon-depot"/></Field>
           <Field label="Objectif"><textarea required maxLength={1500} value={objective} onChange={e => setObjective(e.target.value)}/></Field>
           <Field label="Critères d’acceptation (un par ligne)"><textarea value={criteria} onChange={e => setCriteria(e.target.value)}/></Field>
+          <Field label="Tests d'acceptation du propriétaire (facultatif)" hint="Fichier node:test que le CTO exécute lui-même ; les agents ne le voient jamais. Nom : *.test.js"><input value={accName} pattern="[A-Za-z0-9_.\-]+\.test\.(c|m)?js" onChange={e => setAccName(e.target.value)} aria-label="Nom du fichier de tests d'acceptation"/><textarea className="text-editor team-acc" value={accTests} onChange={e => setAccTests(e.target.value)} aria-label="Contenu des tests d'acceptation"/></Field>
           <Field label="Périmètre autorisé en écriture" hint="Dossiers/fichiers séparés par des espaces. Vide = non restreint. Tout changement hors périmètre est rejeté par le CTO."><input value={scope} onChange={e => setScope(e.target.value)} placeholder="src test"/></Field>
           <Field label="Budget plafond (USD)"><input required type="number" min="0.1" max="50" step="0.1" value={budget} onChange={e => setBudget(e.target.value)}/></Field>
           <button className="primary" disabled={busy || !connected || blocked || readOnly || !project.trusted}><Play size={14}/>Transmettre au CTO IA</button>

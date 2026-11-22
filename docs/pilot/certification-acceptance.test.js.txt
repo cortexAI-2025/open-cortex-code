@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { wrapText } from '../src/wrap.js';
+test('greedy wrapping', () => { assert.equal(wrapText('the quick brown fox', 10), 'the quick\nbrown fox'); assert.equal(wrapText('aaa bbb ccc', 7), 'aaa bbb\nccc'); });
+test('whitespace collapses and is trimmed', () => assert.equal(wrapText('  a   b \t c  ', 20), 'a b c'));
+test('paragraphs and blank lines', () => { assert.equal(wrapText('a\n\nb', 5), 'a\n\nb'); assert.equal(wrapText('a   \n   \nb', 5), 'a\n\nb'); assert.equal(wrapText('', 5), ''); });
+test('CRLF is a newline', () => assert.equal(wrapText('one two\r\nthree', 7), 'one two\nthree'));
+test('long word is split into exact chunks', () => { assert.equal(wrapText('abcdefghij', 5), 'abcde\nfghij'); assert.equal(wrapText('abcdefgh x', 5), 'abcde\nfgh x'); });
+test('long word after a short one starts on a new line', () => assert.equal(wrapText('ab abcdefgh', 5), 'ab\nabcde\nfgh'));
+test('characters are what users see: an emoji counts as one', () => { assert.equal(wrapText('😀😀😀 😀', 3), '😀😀😀\n😀'); assert.equal(wrapText('😀😀😀😀😀😀', 4), '😀😀😀😀\n😀😀'); });
+test('width validation', () => { for (const w of [0, -1, 2.5, NaN, '5', undefined]) assert.throws(() => wrapText('a', w), RangeError); });
+test('text validation', () => { for (const t of [undefined, null, 5, {}]) assert.throws(() => wrapText(t, 5), TypeError); });

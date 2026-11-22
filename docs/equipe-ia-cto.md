@@ -53,3 +53,11 @@ Le CTO doit travailler sur le dépôt du projet ouvert (`CTO_REPO_PATH` = chemin
 `tests/cto-bridge.test.ts` (double de contrat HTTP : coupures, doublons, reprise, redémarrage, secrets, lecture seule, BLOCKED) et
 `tests/team-view.test.tsx` (vue). Avec `CTO_REPO_DIR=/chemin/CTO-AI-AIWORKPAY`, un test supplémentaire exerce le **vrai** orchestrateur du CTO
 (agents scriptés, vrai dépôt Git). La mission pilote avec Claude réel est documentée dans `docs/mission-pilote-cto.md`.
+
+## Démarrage (les deux services)
+```bash
+(cd /chemin/CTO-AI-AIWORKPAY && npm run setup:linux)          # bubblewrap + vérification réelle du runtime (npm run doctor)
+CTO_DIR=/chemin/CTO-AI-AIWORKPAY scripts/team-up.sh /chemin/du/projet   # démarre le CTO puis Open Cortex, attend leur santé
+```
+La configuration (`~/.opencortex/team.env`, mode 600) est créée au premier lancement avec un jeton généré localement ; elle persiste. Le CTO travaille sur le projet passé en argument,
+qui doit être ouvert dans Open Cortex. Preuve d'une exécution complète avec correction autonome : [certification-equipe-ia.md](certification-equipe-ia.md).

@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import os from 'node:os';
@@ -175,7 +175,7 @@ export async function probeNamespace(): Promise<{ available: boolean; reason: st
 }
 
 async function releaseJail(jail: string): Promise<void> {
-  for (const name of ['proc', 'tmp', 'work', 'lib64', 'lib', 'bin', 'usr']) {
+  for (const name of ['opt/cortex-bin/node', 'proc', 'tmp', 'work', 'lib64', 'lib', 'bin', 'usr']) {
     await execute('umount', ['-l', path.join(jail, name)], { cwd: os.tmpdir(), timeoutMs: 2_000, env: safeEnvironment() }).catch(() => undefined);
   }
   await rm(jail, { recursive: true, force: true }).catch(() => undefined);
@@ -191,7 +191,9 @@ function jailScript(): string {
 
 function spawnNamespace(jobId: string, command: string[], cwd: string, timeoutMs: number, network: 'deny' | 'allow', maxProcesses: number): Promise<Execution & { cancelled: boolean }> {
   const jail = path.join(os.tmpdir(), `cortex-jail-${jobId}`);
-  const args = ['--user', '--map-root-user', ...(network === 'deny' ? ['--net'] : []), '--mount', '--pid', '--fork', '--propagation', 'private', '--', 'bash', jailScript(), jail, cwd, String(maxProcesses), ...command];
+  const node = realpathSync(process.execPath);
+  const nodeEnv = /^\/(?:usr|bin|lib|lib64)\//u.test(node) ? [] : [`CORTEX_JAIL_NODE=${node}`];
+  const args = ['--user', '--map-root-user', ...(network === 'deny' ? ['--net'] : []), '--mount', '--pid', '--fork', '--propagation', 'private', '--', '/usr/bin/env', ...nodeEnv, 'bash', jailScript(), jail, cwd, String(maxProcesses), ...command];
   return spawnLocal(jobId, 'unshare', args, cwd, timeoutMs).finally(() => releaseJail(jail));
 }
 
