@@ -28,7 +28,22 @@ pnpm build
 pnpm start
 ```
 
-Ouvrez l'URL locale d'association imprimée par le connecteur. Gardez le token local confidentiel et ne partagez pas le lien. Le serveur reste lié à `127.0.0.1`; ne l'exposez pas sur le réseau.
+Le connecteur imprime une URL locale `http://127.0.0.1:4000/#token=…`. Le port se change avec `CORTEX_PORT`. Le serveur reste lié à `127.0.0.1`.
+
+Les clés BYOK se saisissent dans un profil de l’interface locale. Elles restent en mémoire du connecteur et ne vont pas dans le dépôt. Sans clé et sans endpoint loopback joignable, une mission Agent reste `BLOCKED` : aucun correctif de remplacement n’est écrit.
+
+Le runner externe est un second processus. Même jeton des deux côtés, 16 caractères au minimum :
+
+```bash
+export CORTEX_RUNNER_TOKEN='remplacer-par-un-secret-local-long'
+export CORTEX_RUNNER_HOST=127.0.0.1
+export CORTEX_RUNNER_PORT=8791
+export CORTEX_RUNNER_DATA="$PWD/.cortex/runner"
+export CORTEX_RUNNER_URL="http://127.0.0.1:${CORTEX_RUNNER_PORT}"
+pnpm exec tsx server/runner/main.ts
+```
+
+Le détail du protocole est dans [docs/runner-externe.md](docs/runner-externe.md). Un namespace peut produire `PASS`. `CERTIFIED` exige Docker réellement exécuté.
 
 ## Desktop Linux
 
@@ -49,7 +64,7 @@ pnpm build
 pnpm dev
 ```
 
-La suite comporte 86 tests réussis dans la validation rapportée pour la version 0.1.0. Le test moteur peut être lancé avec `pnpm test:engine`; il requiert Ollama et utilise un modèle local spécifié dans le script. Les tests de génération locale ne prouvent pas que les comptes API commerciaux sont disponibles.
+La commande `pnpm test` est le critère de la suite. Le décompte de 86 tests ne décrit plus cette livraison. `pnpm test:engine` requiert Ollama et un modèle local ; il ne prouve pas qu’un compte API commercial est disponible.
 
 ## Modèles, MCP et automatisations
 
