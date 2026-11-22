@@ -65,12 +65,33 @@ interface LeaseView { missionId: string; taskKey: string; status: string; attemp
 interface ContractView {
   id: string;
   version: number;
+  fingerprint?: string;
   repository: string;
   branch: string;
   objective: string;
   intact: boolean;
   permissions: { allowCommit: boolean; allowPush: boolean; allowPullRequest: boolean };
   decisions: { code: string; allowed: boolean; reason: string }[];
+}
+interface SandboxView {
+  reachable: boolean;
+  docker: boolean;
+  namespace?: boolean;
+  runnerId?: string;
+  location: string;
+  certified: boolean;
+  note: string;
+  jobs: {
+    id?: string;
+    missionId: string;
+    status: string;
+    verdict: string;
+    isolation: string;
+    dockerRan: boolean;
+    command: string;
+    exactlyOnce: false;
+    evidence?: { status: string; runnerId: string; outputSha256: string; gitCommit: string | null; exitCode: number | null; isolation: string; signature?: string };
+  }[];
 }
 
 export function MissionBoard() {
@@ -86,6 +107,7 @@ export function MissionBoard() {
   const certifications = useResource<CertView[]>(api, projectId ? projectRoute(projectId, 'certifications') : null, 15000);
   const resilience = useResource<{ leases: LeaseView[]; abandoned: LeaseView[] }>(api, projectId ? projectRoute(projectId, 'resilience') : null, 8000);
   const contracts = useResource<ContractView[]>(api, projectId ? projectRoute(projectId, 'contracts') : null, 8000);
+  const sandbox = useResource<SandboxView>(api, projectId ? projectRoute(projectId, 'sandbox') : null, 8000);
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('');
   const [profile, setProfile] = useState('');
@@ -114,11 +136,12 @@ export function MissionBoard() {
     certifications.refresh();
     resilience.refresh();
     contracts.refresh();
+    sandbox.refresh();
     setBusy(false);
   };
 
   return <section className="form-panel mission-board"><div className="panel-title"><ShieldCheck size={16}/><h3>Mission avec preuve</h3></div>
-    <p className="small">Le verdict reste local : test exit 0, sans conflit. Le mode Agent demande un correctif à OpenCode seulement si un modèle local ou une clé en mémoire est disponible. Sans cela la mission reste BLOCKED, sans correctif de remplacement. Un worktree n’est pas un sandbox OS. CERTIFIED n’est affiché qu’après une exécution Docker réelle. PASSED_LOCAL n’est pas une isolation. BLOCKED_SANDBOX signifie que l’isolation exigée est indisponible, sans bascule silencieuse.</p>
+    <p className="small">Le verdict reste local : test exit 0, sans conflit. Le mode Agent demande un correctif à OpenCode seulement si un modèle local ou une clé en mémoire est disponible. Sans cela la mission reste BLOCKED, sans correctif de remplacement. Un worktree n’est pas un sandbox OS. CERTIFIED n’est affiché qu’après une exécution Docker réelle. Un namespace du runner peut être PASS sans être CERTIFIED. PASSED_LOCAL n’est pas une isolation. BLOCKED signifie que l’isolation exigée est indisponible, sans bascule silencieuse.</p>
     {certifications.data && <p className="small">Certification : {certifications.data.map((item) => `${item.title} ${item.certified ? 'CERTIFIED' : item.status}`).join(' · ')}</p>}
     <ErrorBox error={missions.error} retry={missions.refresh}/>{missions.loading && <Loading />}
     {missions.data?.map((mission) => {
@@ -157,9 +180,12 @@ export function MissionBoard() {
       {execution?.decisions.at(-1) && <p className="small">Décision : {execution.decisions.at(-1)?.code} · {execution.decisions.at(-1)?.reason}</p>}
       {execution?.output && <p className="small">Sortie : {execution.output.slice(0, 240)}</p>}
       {leases.length > 0 && <p className="small">Reprise : {leases.map((item) => `${item.taskKey} ${item.status} · essai ${item.attempts} · checkpoint ${item.checkpoint} · exactement une fois non`).join(' · ')}{resilience.data?.abandoned.some((item) => item.missionId === mission.id) ? ' · abandon détecté' : ''}</p>}
-      {contract ? <p className="small">Contrat v{contract.version} · intégrité {contract.intact ? 'conforme' : 'altérée'} · branche {contract.branch} · dépôt {contract.repository} · commit {contract.permissions.allowCommit ? 'oui' : 'non'} · push {contract.permissions.allowPush ? 'oui' : 'non'} · pull request {contract.permissions.allowPullRequest ? 'oui' : 'non'}</p> : <p className="small">Aucun contrat scellé. Un résumé de conversation ne remplace pas l’instruction originale.</p>}
+      {contract ? <p className="small">Contrat v{contract.version} · empreinte {contract.fingerprint ? contract.fingerprint.slice(0, 12) : 'absente'} · intégrité {contract.intact ? 'conforme' : 'altérée'} · branche {contract.branch} · dépôt {contract.repository} · commit {contract.permissions.allowCommit ? 'oui' : 'non'} · push {contract.permissions.allowPush ? 'oui' : 'non'} · pull request {contract.permissions.allowPullRequest ? 'oui' : 'non'}</p> : <p className="small">Aucun contrat scellé. Un résumé de conversation ne remplace pas l’instruction originale.</p>}
       {contract && <p className="small">Objectif autorisé : {contract.objective}</p>}
       {refusal && <p className="small">Refus hors mission : {refusal.code} · {refusal.reason}</p>}
+      {sandbox.data && <p className="small">Runner : {sandbox.data.reachable ? 'joint' : 'absent'} · id {sandbox.data.runnerId || 'inconnu'} · lieu {sandbox.data.location} · Docker {sandbox.data.docker ? 'présent' : 'absent'} · namespace {sandbox.data.namespace ? 'disponible' : 'absent'} · certification {sandbox.data.certified ? 'CERTIFIED' : 'non'} · {sandbox.data.note}</p>}
+      {sandbox.data?.jobs.filter((job) => job.missionId === mission.id).slice(-3).map((job) => <p className="small" key={job.id ?? `${job.command}-${job.status}`}>Job {job.status} · {job.verdict} · isolement {job.isolation} · Docker exécuté {job.dockerRan ? 'oui' : 'non'} · preuve {job.evidence?.status ?? 'absente'} · runner {job.evidence?.runnerId ?? 'n/a'} · empreinte {job.evidence?.outputSha256?.slice(0, 12) ?? 'absente'} · commit {job.evidence?.gitCommit ? job.evidence.gitCommit.slice(0, 8) : 'absent'} · exactement une fois non</p>)}
+      {sandbox.data?.jobs.filter((job) => job.missionId === mission.id && job.evidence).slice(-1).map((job) => <pre className="result-json" key={`${job.id ?? job.command}-json`}>{JSON.stringify(job.evidence, null, 2)}</pre>)}
       <p className="small">Jetons consommés {budgetSpent}. Budget restant : non chiffré ici tant qu’une limite de mission n’est pas dépassée côté serveur. Coût : tarif indisponible.</p>
       {publicationState?.latest?.url && <p className="small"><a href={publicationState.latest.url}>{publicationState.latest.url}</a></p>}
       <ul className="delivery-limits">{mission.verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
@@ -183,6 +209,7 @@ export function MissionBoard() {
       <button className="secondary" disabled={!api || !projectId} onClick={() => void post(`missions/${mission.id}/runtime/cancel`, {}, 'Annuler le runtime ?', 'Les tâches restantes sont annulées. Rien n’est publié.')}>Annuler le runtime</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/execute`, { command: testCommand, isolation: 'local' }, 'Exécuter en local non isolé ?', 'Ce runtime n’est pas un sandbox. Le résultat ne peut pas être CERTIFIED. Réseau, mémoire et capabilities ne sont pas confinés.')}>Exécuter en local non isolé</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/execute`, { command: testCommand, isolation: 'required' }, 'Exiger une isolation ?', 'Si Docker n’est pas réellement disponible, la mission reste BLOCKED_SANDBOX. Il n’y a pas de bascule vers le runtime local.')}>Exiger une isolation</button>
+      <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/sandbox`, { command: testCommand, isolation: 'required' }, 'Déléguer au runner externe ?', 'Le runner loopback exécute la commande hors du processus du connecteur. Sans Docker, un namespace vérifié peut donner PASS, jamais CERTIFIED. Un runner absent ou une preuve invalide reste BLOCKED.')}>Déléguer au runner externe</button>
       <button className="secondary" disabled={busy || Boolean(contract)} onClick={() => { const scope = claims.split('\n').flatMap((line) => line.trim().split(/\s+/).slice(1)).filter(Boolean); void post(`missions/${mission.id}/contract`, { branch: publication.data?.currentBranch && publication.data.currentBranch !== 'main' ? publication.data.currentBranch : 'cortex/mission', scope: scope.length ? scope : ['src'], acceptance: ['dernier test exit 0'], permissions: { allowCommit: false, allowPush: false, allowPullRequest: false } }, 'Sceller le contrat de mission ?', 'L’instruction actuelle devient la source d’autorité. Un résumé ne pourra pas la changer.'); }}>Sceller le contrat</button>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const objective = (event.currentTarget.elements.namedItem('objective') as HTMLInputElement).value; void post(`missions/${mission.id}/contract/amend`, { source: 'user', objective }, 'Approuver ce changement d’objectif ?', 'Seul un utilisateur confirmé peut amender le contrat. L’instruction originale est conservée.'); }}><input name="objective" aria-label="Nouvel objectif approuvé" placeholder="Nouvel objectif explicite" required/><button className="secondary" disabled={busy || !contract}>Amender le contrat</button></form>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/orchestrate/publish`, { message: publishMessage, ...grants }, 'Publier avec ces permissions seulement ?', 'Chaque case est une autorisation distincte. Rien n’est fusionné et aucun push forcé n’est émis.'); }}><input aria-label="Message de publication" value={publishMessage} onChange={(event) => setPublishMessage(event.target.value)} required/><label className="small"><input type="checkbox" checked={allowCommit} onChange={(event) => setAllowCommit(event.target.checked)}/> Commit</label><label className="small"><input type="checkbox" checked={allowPush} onChange={(event) => setAllowPush(event.target.checked)}/> Push</label><label className="small"><input type="checkbox" checked={allowPullRequest} onChange={(event) => setAllowPullRequest(event.target.checked)}/> Pull request</label><button className="secondary" type="submit" disabled={busy}>Valider la publication</button><button className="secondary" type="button" disabled={busy} onClick={() => { const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/runtime/publish`, { message: publishMessage, ...grants }, 'Publier le runtime avec ces permissions seulement ?', 'allowCommit, allowPush et allowPullRequest restent distincts. Rien n’est fusionné et aucun push forcé n’est émis.'); }}>Publier le runtime</button></form>

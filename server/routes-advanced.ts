@@ -16,6 +16,7 @@ import { registerRuntimeRoutes } from './advanced/runtime.js';
 import { registerSecureRoutes } from './advanced/secure-execution.js';
 import { registerResilienceRoutes } from './advanced/resilience.js';
 import { registerIntegrityRoutes } from './advanced/mission-integrity.js';
+import { registerSandboxRoutes } from './advanced/external-runner.js';
 import { registerWorktreeClaimRoutes } from './advanced/worktree-claims.js';
 
 export { shutdownAdvanced } from './advanced/automations.js';
@@ -37,6 +38,7 @@ export function registerAdvancedRoutes(app: Express, ctx: ConnectorContext): voi
   registerSecureRoutes(app, ctx);
   registerResilienceRoutes(app, ctx);
   registerIntegrityRoutes(app, ctx);
+  registerSandboxRoutes(app, ctx);
   registerWorktreeClaimRoutes(app, ctx);
   registerAutomationRoutes(app, ctx);
 }

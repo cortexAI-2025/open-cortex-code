@@ -272,6 +272,7 @@ export async function runAgentMission(ctx: Context, target: Project, missionId: 
     budgetMs: z.number().int().min(50).max(600_000).default(180_000),
     timeoutMs: z.number().int().min(50).max(30_000).default(15_000),
     testPolicy: z.enum(['deny', 'create', 'adapt']).default('deny'),
+    untrustedNote: z.string().trim().max(4_000).optional(),
   }).strict().parse(input);
   assertRepairCommand(body.command);
   const clock = options.clock ?? Date.now;
@@ -368,6 +369,10 @@ export async function runAgentMission(ctx: Context, target: Project, missionId: 
     if (!current.claims.some((claim) => claim.paths.length)) {
       repairs.push(attempt({ ...base, index, exitCode: null, diagnosis: 'Aucun fichier revendiqué. OpenCode n’est pas lancé.', invoked: false, stopped: 'blocked' }));
       break;
+    }
+    if (body.untrustedNote) {
+      const drift = authorizeOperation(ctx, target, missionId, { source: 'summary', action: 'write', branch: branchName, paths: current.claims.flatMap((claim) => claim.paths), proposedObjective: body.untrustedNote, repository: target.path });
+      if (!drift.allowed) note('reviewer', `Résumé non fiable refusé : ${drift.reason}`);
     }
     if (ctx.store.get('mission-contracts', missionId)) {
       const live = await git(target, ['branch', '--show-current']);
