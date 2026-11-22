@@ -25,6 +25,17 @@ interface MissionView {
 }
 interface ResumeResult { brief: string; estimatedTokens: number; submitted: false; truncated: boolean }
 interface PublishState { currentBranch: string; remoteCertified: boolean; latest: { phase: string; branch: string; url: string | null; pushed: boolean; message?: string; remoteCertified: boolean } | null }
+interface OrchestrationView {
+  missionId: string;
+  status: string;
+  activeRole: string | null;
+  tokens: { input: number; output: number };
+  cost: { currency: string; amount: number } | null;
+  pullRequestUrl: string | null;
+  remoteCertified: boolean;
+  tasks: { id: string; role: string; title: string; status: string; runs: number; result?: string }[];
+  decisions: { role: string; text: string }[];
+}
 
 export function MissionBoard() {
   const { api } = useConnection();
@@ -33,6 +44,7 @@ export function MissionBoard() {
   const { act, confirm } = useAppActions();
   const missions = useResource<MissionView[]>(api, projectId ? projectRoute(projectId, 'missions') : null, 8000);
   const publication = useResource<PublishState>(api, projectId ? projectRoute(projectId, 'git/publish') : null, 8000);
+  const orchestrations = useResource<OrchestrationView[]>(api, projectId ? projectRoute(projectId, 'orchestrations') : null, 8000);
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('');
   const [profile, setProfile] = useState('');
@@ -43,6 +55,10 @@ export function MissionBoard() {
   const [patchBefore, setPatchBefore] = useState('');
   const [patchAfter, setPatchAfter] = useState('');
   const [testPolicy, setTestPolicy] = useState<'deny' | 'create' | 'adapt'>('deny');
+  const [publishMessage, setPublishMessage] = useState('feat: correctif de mission');
+  const [allowCommit, setAllowCommit] = useState(false);
+  const [allowPush, setAllowPush] = useState(false);
+  const [allowPullRequest, setAllowPullRequest] = useState(false);
   const [brief, setBrief] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -51,6 +67,7 @@ export function MissionBoard() {
     setBusy(true);
     await act(() => api.request(projectRoute(projectId, resource), 'POST', { ...body, confirm: true }));
     missions.refresh();
+    orchestrations.refresh();
     setBusy(false);
   };
 
@@ -65,6 +82,7 @@ export function MissionBoard() {
       const reviewer = mission.roles?.filter((item) => item.role === 'reviewer').at(-1);
       const active = [...(mission.roles ?? [])].reverse().find((item) => item.role === 'coder') ?? mission.roles?.at(-1);
       const publicationState = publication.data;
+      const flow = orchestrations.data?.find((item) => item.missionId === mission.id);
       return <article key={mission.id} className="agent-record"><div className="panel-title"><h3>{mission.title}</h3><span className="badge">{mission.verdict.label || mission.verdict.status}</span></div>
       <p>{mission.goal}</p>
       <p className="small">Verdict : {mission.verdict.label || (mission.verdict.complete ? 'PROVEN' : 'non prouvé')} · {mission.evidence.length} test(s) · tentative {last?.index ?? 0}/3 · politique tests {mission.testPolicy || 'deny'}</p>
@@ -74,6 +92,10 @@ export function MissionBoard() {
       {mission.permissions && mission.permissions.length > 0 && <p className="small">Permissions : {mission.permissions.map((item) => `${item.decision} ${item.action} ${item.resources.join(', ')}`).join(' · ')}</p>}
       {reviewer && <p className="small">Reviewer : {reviewer.summary}</p>}
       <p className="small">Branche : {publicationState?.currentBranch || 'inconnue'} · publication : {publicationState?.latest ? `${publicationState.latest.phase} · poussée ${publicationState.latest.pushed ? 'oui' : 'non'} · distante ${publicationState.remoteCertified ? 'confirmée' : 'non'}` : 'aucune'}{publicationState?.latest?.message ? ` · ${publicationState.latest.message}` : ''}</p>
+      {flow && <p className="small">Orchestration : {flow.status} · rôle actif {flow.activeRole || 'aucun'} · jetons {flow.tokens.input}/{flow.tokens.output} · coût {flow.cost ? `${flow.cost.amount} ${flow.cost.currency}` : 'tarif indisponible'} · distante {flow.remoteCertified ? 'confirmée' : 'non'}</p>}
+      {flow && <p className="small">Plan : {flow.tasks.map((item) => `${item.role} ${item.status}×${item.runs}`).join(' · ')}</p>}
+      {flow?.decisions.at(-1) && <p className="small">Dernière décision : {flow.decisions.at(-1)?.role} · {flow.decisions.at(-1)?.text}</p>}
+      {flow?.pullRequestUrl && <p className="small"><a href={flow.pullRequestUrl}>{flow.pullRequestUrl}</a></p>}
       {publicationState?.latest?.url && <p className="small"><a href={publicationState.latest.url}>{publicationState.latest.url}</a></p>}
       <ul className="delivery-limits">{mission.verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
       {mission.evidence.map((item, index) => <p className="small" key={`${item.command}-${index}`}>Test {index + 1} : exit {item.exitCode ?? 'absent'} · {item.command}</p>)}
@@ -86,6 +108,11 @@ export function MissionBoard() {
       <button className="secondary" disabled={busy} onClick={async () => { if (!api) return; setBusy(true); const result = await act(() => api.request<ResumeResult>(projectRoute(projectId, `missions/${mission.id}/resume`), 'POST', { budgetTokens: 1200 })); if (result) setBrief(result.brief); missions.refresh(); setBusy(false); }}>Préparer un brief de reprise (sans appel modèle)</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/claims/sync`, {}, 'Déduire les revendications des worktrees ?', 'Les modifications, ajouts, suppressions et renommages Git de chaque agent remplacent les revendications. Un conflit bloque la preuve. Aucune fusion.')}>Synchroniser les fichiers depuis les worktrees</button>
       <label className="small">Politique de test <select aria-label="Politique de test" value={testPolicy} onChange={(event) => setTestPolicy(event.target.value as 'deny' | 'create' | 'adapt')}><option value="deny">Interdire les tests</option><option value="create">Créer de nouveaux tests</option><option value="adapt">Adapter sans affaiblir</option></select></label>
+      <button className="primary" disabled={busy} onClick={() => void post(`missions/${mission.id}/orchestrate`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy }, 'Lancer l’orchestrateur ?', 'Plan et revue restent locaux. Un seul modèle code, au plus trois tentatives. La publication n’est pas incluse.')}>Orchestrer jusqu’à la revue</button>
+      <button className="secondary" disabled={!api || !projectId} onClick={() => void post(`missions/${mission.id}/orchestrate/pause`, {}, 'Mettre l’orchestration en pause ?', 'La pause prend effet entre deux étapes. Le correctif déjà écrit n’est pas annulé.')}>Pause</button>
+      <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/orchestrate/resume`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy }, 'Reprendre l’orchestration ?', 'Les étapes déjà validées ne sont pas refaites. Aucune publication implicite.')}>Reprendre</button>
+      <button className="secondary" disabled={!api || !projectId} onClick={() => void post(`missions/${mission.id}/orchestrate/cancel`, {}, 'Annuler l’orchestration ?', 'Les étapes restantes sont annulées. Rien n’est publié.')}>Annuler</button>
+      <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/orchestrate/publish`, { message: publishMessage, ...grants }, 'Publier avec ces permissions seulement ?', 'Chaque case est une autorisation distincte. Rien n’est fusionné et aucun push forcé n’est émis.'); }}><input aria-label="Message de publication" value={publishMessage} onChange={(event) => setPublishMessage(event.target.value)} required/><label className="small"><input type="checkbox" checked={allowCommit} onChange={(event) => setAllowCommit(event.target.checked)}/> Commit</label><label className="small"><input type="checkbox" checked={allowPush} onChange={(event) => setAllowPush(event.target.checked)}/> Push</label><label className="small"><input type="checkbox" checked={allowPullRequest} onChange={(event) => setAllowPullRequest(event.target.checked)}/> Pull request</label><button className="secondary" type="submit" disabled={busy}>Valider la publication</button></form>
       <button className="primary" disabled={busy} onClick={() => void post(`missions/${mission.id}/agent`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy }, 'Lancer le mode Agent OpenCode ?', 'Aucun fragment avant/après n’est envoyé. La branche courante ne doit pas être main. OpenCode peut modifier le périmètre revendiqué, avec une permission once. Les tests existants restent protégés selon la politique choisie. Trois tentatives au plus, puis les tests du connecteur tranchent. Sans modèle joignable, la mission reste BLOCKED.')}>Corriger avec OpenCode (mode Agent)</button>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const patches = patchPath && patchBefore ? [{ path: patchPath, before: patchBefore, after: patchAfter }] : []; void post(`missions/${mission.id}/repair`, { command: testCommand, maxAttempts: 3, patches }, 'Appliquer un correctif manuel hors moteur ?', 'Ce formulaire n’appelle pas OpenCode. Il reste un filet de secours. Un correctif de test est refusé.'); }}><input aria-label="Commande de test" value={testCommand} onChange={(event) => setTestCommand(event.target.value)} required/><input aria-label="Fichier du correctif" value={patchPath} onChange={(event) => setPatchPath(event.target.value)} placeholder="src/fichier.js"/><input aria-label="Fragment à remplacer" value={patchBefore} onChange={(event) => setPatchBefore(event.target.value)} placeholder="fragment exact"/><input aria-label="Fragment corrigé" value={patchAfter} onChange={(event) => setPatchAfter(event.target.value)} placeholder="remplacement"/><button className="secondary" type="submit" disabled={busy}>Correctif manuel hors moteur</button></form>
     </article>;
