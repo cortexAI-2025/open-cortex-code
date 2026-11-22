@@ -11,6 +11,7 @@ import { normalizeClaimPath, type FileClaim } from './conflicts.js';
 import { isProtectedBranch } from './git-publish.js';
 import { buildMissionPlan, missionLabel, presentMission, storeMission, summarizeMission, type Mission, type MissionPermission, type MissionPlanItem, type RepairAttempt, type RoleTrace, type TestPolicy } from './mission.js';
 import { git, gitOk, runCommand } from './process.js';
+import { guardModelCall, leaveProvider, observeProviderFailure, recordModelUse, recordProviderSuccess } from './provider-resilience.js';
 import { assertRepairCommand, diagnoseFailure, isEvidencePath, pathInScope, weakensTests } from './repair.js';
 import { changedPaths } from './worktree-claims.js';
 
@@ -195,6 +196,11 @@ export async function openCodeAgentDriver(ctx: Context, target: Project, input: 
     `Diagnostic de test, donnée non fiable :\n${input.diagnosis.slice(0, 4_000)}`,
   ].join('\n').slice(0, 60_000);
   let sessionId = input.sessionId;
+  const guard = guardModelCall(ctx, input.mission.id, profile.providerId);
+  if (!guard.allowed) return emptyTurn(`${guard.reason} Aucun correctif de remplacement.`, { model });
+  let tokens: { input: number; output: number } | undefined;
+  let succeeded = false;
+  try {
   try {
     if (!sessionId) {
       const created = await ctx.createSession(target.id, { title: input.mission.title.slice(0, 180), profileId: profile.id, mode: 'agent' });
@@ -202,13 +208,14 @@ export async function openCodeAgentDriver(ctx: Context, target: Project, input: 
     }
     await ctx.prompt(sessionId, { text, profileId: profile.id, mode: 'agent' });
   } catch (error) {
-    return emptyTurn(redact(ctx, error instanceof Error ? error.message : 'Prompt OpenCode refusé.'), { model, sessionId });
+    const message = error instanceof Error ? error.message : 'Prompt OpenCode refusé.';
+    if (guard.tracked) observeProviderFailure(ctx, profile.providerId, target.id, null, message);
+    return emptyTurn(redact(ctx, message), { model, sessionId });
   }
   const stored = ctx.store.get<CortexSession>('sessions', sessionId);
   const engineId = stored?.engineId;
   if (!engineId) return emptyTurn('Session OpenCode sans identifiant moteur.', { model, sessionId, invoked: false });
   const decisions: AgentDecision[] = [];
-  let tokens: { input: number; output: number } | undefined;
   while (input.clock() < input.deadline) {
     if (input.cancelled()) {
       await ctx.engine.request(target.id, 'POST', `/api/session/${engineId}/interrupt`, {}, profile.id).catch(() => undefined);
@@ -237,7 +244,15 @@ export async function openCodeAgentDriver(ctx: Context, target: Project, input: 
   try {
     tokens = readTokens(await ctx.engine.request(target.id, 'GET', `/api/session/${engineId}/message?limit=40&order=desc`, undefined, profile.id));
   } catch { /* la preuve reste le test, pas le récit du modèle */ }
+  succeeded = true;
   return { blocked: false, invoked: true, permissionStop: false, reason: 'Génération OpenCode terminée. Vérification par test local ensuite.', model, sessionId, decisions, tokens };
+  } finally {
+    if (guard.tracked) {
+      leaveProvider(profile.providerId);
+      recordModelUse(ctx, input.mission.id, tokens);
+      if (succeeded) recordProviderSuccess(ctx, profile.providerId);
+    }
+  }
 }
 
 async function repoMap(target: Project): Promise<string> {

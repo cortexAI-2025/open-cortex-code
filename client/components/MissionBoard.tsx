@@ -49,6 +49,19 @@ interface RuntimeView {
   corrections?: string[];
   tasks: { id: string; key: string; role: string; agentId: string; title: string; status: string; dependsOn: string[]; runs: number; result?: string }[];
 }
+interface SecureRunView {
+  missionId: string;
+  runtime: string;
+  isolation: string;
+  verdict: string;
+  enforced: { memory: boolean; network: boolean; readOnly: boolean };
+  timedOut: boolean;
+  cancelled: boolean;
+  decisions: { code: string; reason: string }[];
+  output: string;
+}
+interface CertView { id: string; title: string; status: string; reason: string; certified: boolean }
+interface LeaseView { missionId: string; taskKey: string; status: string; attempts: number; checkpoint: string; exactlyOnce: false }
 
 export function MissionBoard() {
   const { api } = useConnection();
@@ -59,6 +72,9 @@ export function MissionBoard() {
   const publication = useResource<PublishState>(api, projectId ? projectRoute(projectId, 'git/publish') : null, 8000);
   const orchestrations = useResource<OrchestrationView[]>(api, projectId ? projectRoute(projectId, 'orchestrations') : null, 8000);
   const runtimes = useResource<RuntimeView[]>(api, projectId ? projectRoute(projectId, 'runtimes') : null, 8000);
+  const executions = useResource<SecureRunView[]>(api, projectId ? projectRoute(projectId, 'executions') : null, 8000);
+  const certifications = useResource<CertView[]>(api, projectId ? projectRoute(projectId, 'certifications') : null, 15000);
+  const resilience = useResource<{ leases: LeaseView[]; abandoned: LeaseView[] }>(api, projectId ? projectRoute(projectId, 'resilience') : null, 8000);
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('');
   const [profile, setProfile] = useState('');
@@ -83,11 +99,15 @@ export function MissionBoard() {
     missions.refresh();
     orchestrations.refresh();
     runtimes.refresh();
+    executions.refresh();
+    certifications.refresh();
+    resilience.refresh();
     setBusy(false);
   };
 
   return <section className="form-panel mission-board"><div className="panel-title"><ShieldCheck size={16}/><h3>Mission avec preuve</h3></div>
-    <p className="small">Le verdict reste local : test exit 0, sans conflit. Le mode Agent demande un correctif à OpenCode seulement si un modèle local ou une clé en mémoire est disponible. Sans cela la mission reste BLOCKED, sans correctif de remplacement. Un worktree n’est pas un sandbox OS.</p>
+    <p className="small">Le verdict reste local : test exit 0, sans conflit. Le mode Agent demande un correctif à OpenCode seulement si un modèle local ou une clé en mémoire est disponible. Sans cela la mission reste BLOCKED, sans correctif de remplacement. Un worktree n’est pas un sandbox OS. CERTIFIED n’est affiché qu’après une exécution Docker réelle. PASSED_LOCAL n’est pas une isolation. BLOCKED_SANDBOX signifie que l’isolation exigée est indisponible, sans bascule silencieuse.</p>
+    {certifications.data && <p className="small">Certification : {certifications.data.map((item) => `${item.title} ${item.certified ? 'CERTIFIED' : item.status}`).join(' · ')}</p>}
     <ErrorBox error={missions.error} retry={missions.refresh}/>{missions.loading && <Loading />}
     {missions.data?.map((mission) => {
       const last = mission.repairs?.at(-1);
@@ -99,6 +119,9 @@ export function MissionBoard() {
       const publicationState = publication.data;
       const flow = orchestrations.data?.find((item) => item.missionId === mission.id);
       const runtime = runtimes.data?.find((item) => item.missionId === mission.id);
+      const execution = executions.data?.filter((item) => item.missionId === mission.id).at(-1);
+      const leases = resilience.data?.leases.filter((item) => item.missionId === mission.id) ?? [];
+      const budgetSpent = tokens.input + tokens.output;
       return <article key={mission.id} className="agent-record"><div className="panel-title"><h3>{mission.title}</h3><span className="badge">{mission.verdict.label || mission.verdict.status}</span></div>
       <p>{mission.goal}</p>
       <p className="small">Verdict : {mission.verdict.label || (mission.verdict.complete ? 'PROVEN' : 'non prouvé')} · {mission.evidence.length} test(s) · tentative {last?.index ?? 0}/3 · politique tests {mission.testPolicy || 'deny'}</p>
@@ -116,6 +139,11 @@ export function MissionBoard() {
       {runtime && <p className="small">Tâches : {runtime.tasks.map((item) => `${item.role} ${item.status}×${item.runs}${item.dependsOn.length ? ` ← ${item.dependsOn.map((dep) => runtime.tasks.find((candidate) => candidate.id === dep)?.role || dep).join(', ')}` : ''}`).join(' · ')}</p>}
       {runtime?.corrections && runtime.corrections.length > 0 && <p className="small">Corrections : {runtime.corrections.join(' · ')}</p>}
       {runtime?.pullRequestUrl && <p className="small"><a href={runtime.pullRequestUrl}>{runtime.pullRequestUrl}</a></p>}
+      {execution && <p className="small">Exécution : {execution.verdict} · runtime {execution.runtime} · isolation {execution.isolation} · mémoire appliquée {execution.enforced.memory ? 'oui' : 'non'} · réseau appliqué {execution.enforced.network ? 'oui' : 'non'} · lecture seule {execution.enforced.readOnly ? 'oui' : 'non'}{execution.timedOut ? ' · timeout' : ''}{execution.cancelled ? ' · annulée' : ''}</p>}
+      {execution?.decisions.at(-1) && <p className="small">Décision : {execution.decisions.at(-1)?.code} · {execution.decisions.at(-1)?.reason}</p>}
+      {execution?.output && <p className="small">Sortie : {execution.output.slice(0, 240)}</p>}
+      {leases.length > 0 && <p className="small">Reprise : {leases.map((item) => `${item.taskKey} ${item.status} · essai ${item.attempts} · checkpoint ${item.checkpoint} · exactement une fois non`).join(' · ')}{resilience.data?.abandoned.some((item) => item.missionId === mission.id) ? ' · abandon détecté' : ''}</p>}
+      <p className="small">Jetons consommés {budgetSpent}. Budget restant : non chiffré ici tant qu’une limite de mission n’est pas dépassée côté serveur. Coût : tarif indisponible.</p>
       {publicationState?.latest?.url && <p className="small"><a href={publicationState.latest.url}>{publicationState.latest.url}</a></p>}
       <ul className="delivery-limits">{mission.verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
       {mission.evidence.map((item, index) => <p className="small" key={`${item.command}-${index}`}>Test {index + 1} : exit {item.exitCode ?? 'absent'} · {item.command}</p>)}
@@ -136,6 +164,8 @@ export function MissionBoard() {
       <button className="secondary" disabled={!api || !projectId} onClick={() => void post(`missions/${mission.id}/runtime/pause`, {}, 'Mettre le runtime en pause ?', 'La pause prend effet entre deux tâches. Elle ne coupe pas un appel modèle déjà lancé.')}>Pause du runtime</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/runtime/resume`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy, concurrency: 2 }, 'Reprendre le runtime ?', 'Une tâche déjà validée n’est pas refaite sans invalidation. La publication n’est pas incluse.')}>Reprendre le runtime</button>
       <button className="secondary" disabled={!api || !projectId} onClick={() => void post(`missions/${mission.id}/runtime/cancel`, {}, 'Annuler le runtime ?', 'Les tâches restantes sont annulées. Rien n’est publié.')}>Annuler le runtime</button>
+      <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/execute`, { command: testCommand, isolation: 'local' }, 'Exécuter en local non isolé ?', 'Ce runtime n’est pas un sandbox. Le résultat ne peut pas être CERTIFIED. Réseau, mémoire et capabilities ne sont pas confinés.')}>Exécuter en local non isolé</button>
+      <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/execute`, { command: testCommand, isolation: 'required' }, 'Exiger une isolation ?', 'Si Docker n’est pas réellement disponible, la mission reste BLOCKED_SANDBOX. Il n’y a pas de bascule vers le runtime local.')}>Exiger une isolation</button>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/orchestrate/publish`, { message: publishMessage, ...grants }, 'Publier avec ces permissions seulement ?', 'Chaque case est une autorisation distincte. Rien n’est fusionné et aucun push forcé n’est émis.'); }}><input aria-label="Message de publication" value={publishMessage} onChange={(event) => setPublishMessage(event.target.value)} required/><label className="small"><input type="checkbox" checked={allowCommit} onChange={(event) => setAllowCommit(event.target.checked)}/> Commit</label><label className="small"><input type="checkbox" checked={allowPush} onChange={(event) => setAllowPush(event.target.checked)}/> Push</label><label className="small"><input type="checkbox" checked={allowPullRequest} onChange={(event) => setAllowPullRequest(event.target.checked)}/> Pull request</label><button className="secondary" type="submit" disabled={busy}>Valider la publication</button><button className="secondary" type="button" disabled={busy} onClick={() => { const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/runtime/publish`, { message: publishMessage, ...grants }, 'Publier le runtime avec ces permissions seulement ?', 'allowCommit, allowPush et allowPullRequest restent distincts. Rien n’est fusionné et aucun push forcé n’est émis.'); }}>Publier le runtime</button></form>
       <button className="primary" disabled={busy} onClick={() => void post(`missions/${mission.id}/agent`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy }, 'Lancer le mode Agent OpenCode ?', 'Aucun fragment avant/après n’est envoyé. La branche courante ne doit pas être main. OpenCode peut modifier le périmètre revendiqué, avec une permission once. Les tests existants restent protégés selon la politique choisie. Trois tentatives au plus, puis les tests du connecteur tranchent. Sans modèle joignable, la mission reste BLOCKED.')}>Corriger avec OpenCode (mode Agent)</button>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const patches = patchPath && patchBefore ? [{ path: patchPath, before: patchBefore, after: patchAfter }] : []; void post(`missions/${mission.id}/repair`, { command: testCommand, maxAttempts: 3, patches }, 'Appliquer un correctif manuel hors moteur ?', 'Ce formulaire n’appelle pas OpenCode. Il reste un filet de secours. Un correctif de test est refusé.'); }}><input aria-label="Commande de test" value={testCommand} onChange={(event) => setTestCommand(event.target.value)} required/><input aria-label="Fichier du correctif" value={patchPath} onChange={(event) => setPatchPath(event.target.value)} placeholder="src/fichier.js"/><input aria-label="Fragment à remplacer" value={patchBefore} onChange={(event) => setPatchBefore(event.target.value)} placeholder="fragment exact"/><input aria-label="Fragment corrigé" value={patchAfter} onChange={(event) => setPatchAfter(event.target.value)} placeholder="remplacement"/><button className="secondary" type="submit" disabled={busy}>Correctif manuel hors moteur</button></form>

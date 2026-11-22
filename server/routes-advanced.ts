@@ -13,6 +13,8 @@ import { registerRepairRoutes } from './advanced/repair.js';
 import { registerAgentMissionRoutes } from './advanced/agent-mission.js';
 import { registerOrchestratorRoutes } from './advanced/orchestrator.js';
 import { registerRuntimeRoutes } from './advanced/runtime.js';
+import { registerSecureRoutes } from './advanced/secure-execution.js';
+import { registerResilienceRoutes } from './advanced/resilience.js';
 import { registerWorktreeClaimRoutes } from './advanced/worktree-claims.js';
 
 export { shutdownAdvanced } from './advanced/automations.js';
@@ -31,6 +33,8 @@ export function registerAdvancedRoutes(app: Express, ctx: ConnectorContext): voi
   registerAgentMissionRoutes(app, ctx);
   registerOrchestratorRoutes(app, ctx);
   registerRuntimeRoutes(app, ctx);
+  registerSecureRoutes(app, ctx);
+  registerResilienceRoutes(app, ctx);
   registerWorktreeClaimRoutes(app, ctx);
   registerAutomationRoutes(app, ctx);
 }
