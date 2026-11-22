@@ -129,13 +129,13 @@ describe('Git réel et mission, sans GitHub réseau', () => {
   it('refuse un commit sur main, puis commit uniquement sur cortex/', async () => {
     await setup();
     await writeFile(path.join(project.path, 'note.txt'), 'bonjour\n');
-    await expect(commitPaths(ctx, project, { message: 'nope', paths: ['note.txt'], confirm: true })).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
+    await expect(commitPaths(ctx, project, { message: 'nope', paths: ['note.txt'], confirm: true, allowCommit: true })).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
     expect((await gitOk(project, ['log', '--oneline'])).trim().split('\n')).toHaveLength(1);
     expect((await gitOk(project, ['branch', '--show-current'])).trim()).toBe('main');
     const created = await createAndCheckoutFeatureBranch(ctx, project, { name: 'cortex/mission-preuve', confirm: true });
     expect(created).toMatchObject({ branch: 'cortex/mission-preuve', merged: false });
-    await expect(commitPaths(ctx, project, { message: 'secret', paths: ['.env'], confirm: true })).rejects.toMatchObject({ code: 'SENSITIVE_FILE' });
-    const committed = await commitPaths(ctx, project, { message: 'feat: note locale', paths: ['note.txt'], confirm: true });
+    await expect(commitPaths(ctx, project, { message: 'secret', paths: ['.env'], confirm: true, allowCommit: true })).rejects.toMatchObject({ code: 'SENSITIVE_FILE' });
+    const committed = await commitPaths(ctx, project, { message: 'feat: note locale', paths: ['note.txt'], confirm: true, allowCommit: true });
     expect(committed).toMatchObject({ pushed: false, merged: false, branch: 'cortex/mission-preuve' });
     expect((await gitOk(project, ['log', '-1', '--format=%s'])).trim()).toBe('feat: note locale');
     expect((await gitOk(project, ['branch', '--show-current'])).trim()).not.toBe('main');
@@ -144,12 +144,12 @@ describe('Git réel et mission, sans GitHub réseau', () => {
   it('n’ouvre pas de PR réelle et n’appelle pas gh tant que la branche est protégée', async () => {
     await setup();
     const runner = vi.fn(async (): Promise<Execution> => { throw new Error('gh ne doit pas être appelé'); });
-    await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPush: true }, runner)).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
+    await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPullRequest: true }, runner)).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
     expect(runner).not.toHaveBeenCalled();
     await createAndCheckoutFeatureBranch(ctx, project, { name: 'cortex/mission-pr', confirm: true });
     await gitOk(project, ['update-ref', 'refs/remotes/origin/cortex/mission-pr', 'HEAD']);
     const gh = vi.fn(async (_executable: string, args: string[]): Promise<Execution> => ({ output: args[0] === 'auth' ? 'logged in\n' : 'https://github.com/example/fixture/pull/7\n', exitCode: 0, signal: null, timedOut: false, truncated: false, durationMs: 1 }));
-    const opened = await openPullRequest(ctx, project, { base: 'main', title: 'Mission', body: 'Pas de merge.', confirm: true, allowPush: true }, gh);
+    const opened = await openPullRequest(ctx, project, { base: 'main', title: 'Mission', body: 'Pas de merge.', confirm: true, allowPullRequest: true }, gh);
     expect(opened).toMatchObject({ url: 'https://github.com/example/fixture/pull/7', merged: false, forced: false, branch: 'cortex/mission-pr', remoteCertified: false });
     const calls = gh.mock.calls as unknown as [string, string[]][];
     expect(calls.some((call) => call[1]?.includes('pr') && call[1]?.includes('create'))).toBe(true);

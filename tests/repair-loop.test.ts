@@ -216,16 +216,16 @@ describe('boucle de correction et publication simulée', () => {
     const pushGit = vi.fn(async (): Promise<Execution> => done({ output: 'no', exitCode: 0 }));
     await expect(pushFeatureBranch(ctx, project, {})).rejects.toMatchObject({ code: 'CONFIRM_REQUIRED' });
     await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps' })).rejects.toMatchObject({ code: 'CONFIRM_REQUIRED' });
-    await expect(commitPaths(ctx, project, { message: 'nope', paths: ['README.md'], confirm: true })).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
+    await expect(commitPaths(ctx, project, { message: 'nope', paths: ['README.md'], confirm: true, allowCommit: true })).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
     await expect(pushFeatureBranch(ctx, project, { confirm: true, allowPush: true }, gh, pushGit)).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
-    await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPush: true }, gh)).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
+    await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPullRequest: true }, gh)).rejects.toMatchObject({ code: 'PROTECTED_BRANCH' });
     expect(gh).not.toHaveBeenCalled();
     expect(pushGit).not.toHaveBeenCalled();
     await createAndCheckoutFeatureBranch(ctx, project, { name: 'cortex/mission-auth', confirm: true });
     await expect(pushFeatureBranch(ctx, project, { confirm: true, allowPush: true }, gh, pushGit)).rejects.toMatchObject({ code: 'GH_AUTH_REQUIRED' });
     expect(pushGit).not.toHaveBeenCalled();
     await gitOk(project, ['update-ref', 'refs/remotes/origin/cortex/mission-auth', 'HEAD']);
-    await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPush: true }, gh)).rejects.toMatchObject({ code: 'GH_AUTH_REQUIRED' });
+    await expect(openPullRequest(ctx, project, { title: 'PR', body: 'corps', confirm: true, allowPullRequest: true }, gh)).rejects.toMatchObject({ code: 'GH_AUTH_REQUIRED' });
     const calls = gh.mock.calls as unknown as [string, string[]][];
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call[1]?.[0] === 'auth')).toBe(true);
@@ -235,10 +235,10 @@ describe('boucle de correction et publication simulée', () => {
     await setup();
     await writeFile(path.join(project.path, 'note.txt'), 'bonjour\n');
     await createAndCheckoutFeatureBranch(ctx, project, { name: 'cortex/mission-push', confirm: true });
-    const committed = await commitPaths(ctx, project, { message: 'feat: note locale', paths: ['note.txt'], confirm: true });
+    const committed = await commitPaths(ctx, project, { message: 'feat: note locale', paths: ['note.txt'], confirm: true, allowCommit: true });
     expect(committed).toMatchObject({ files: ['note.txt'], pushed: false, remoteCertified: false });
     const gh = vi.fn(async (_executable: string, args: string[]): Promise<Execution> => done({ output: args[0] === 'auth' ? 'logged in\n' : 'https://github.com/example/fixture/pull/9\n', exitCode: 0 }));
-    await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'Pas de merge.', confirm: true, allowPush: true }, gh)).rejects.toMatchObject({ code: 'PUSH_REQUIRED' });
+    await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'Pas de merge.', confirm: true, allowPullRequest: true }, gh)).rejects.toMatchObject({ code: 'PUSH_REQUIRED' });
     expect(gh).not.toHaveBeenCalled();
     const pushGit = vi.fn(async (args: string[]): Promise<Execution> => done({ output: args.join(' '), exitCode: 0 }));
     const pushed = await pushFeatureBranch(ctx, project, { confirm: true, allowPush: true }, gh, pushGit);
@@ -246,17 +246,44 @@ describe('boucle de correction et publication simulée', () => {
     expect(pushGit).toHaveBeenCalledWith(['push', '--set-upstream', 'origin', 'cortex/mission-push']);
     expect(JSON.stringify(pushGit.mock.calls)).not.toMatch(/force/);
     await gitOk(project, ['update-ref', 'refs/remotes/origin/cortex/mission-push', 'HEAD']);
-    const opened = await openPullRequest(ctx, project, { base: 'main', title: 'Mission', body: 'Simulation locale, aucune fusion.', confirm: true, allowPush: true }, gh);
+    const opened = await openPullRequest(ctx, project, { base: 'main', title: 'Mission', body: 'Simulation locale, aucune fusion.', confirm: true, allowPullRequest: true }, gh);
     expect(opened).toMatchObject({ url: 'https://github.com/example/fixture/pull/9', merged: false, forced: false, remoteCertified: false });
     const status = await publishStatus(ctx, project);
     expect(status).toMatchObject({ currentBranch: 'cortex/mission-push', remoteCertified: false });
     expect(status.headFiles).toContain('note.txt');
     expect(status.latest).toMatchObject({ phase: 'pull-request', branch: 'cortex/mission-push', base: 'main', remoteCertified: false, url: opened.url });
     await writeFile(path.join(project.path, 'extra.txt'), 'de trop\n');
-    await expect(commitPaths(ctx, project, { message: 'feat: trop large', paths: ['extra.txt', 'README.md'], confirm: true })).rejects.toMatchObject({ code: 'COMMIT_SCOPE' });
+    await expect(commitPaths(ctx, project, { message: 'feat: trop large', paths: ['extra.txt', 'README.md'], confirm: true, allowCommit: true })).rejects.toMatchObject({ code: 'COMMIT_SCOPE' });
     const mission = createMission(ctx, project, { title: 'Ouverte', goal: 'Pas encore prouvée', profileId: 'fixture-profile', confirm: true });
-    await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'Encore.', confirm: true, allowPush: true }, gh)).rejects.toMatchObject({ code: 'MISSION_NOT_PROVEN' });
+    await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'Encore.', confirm: true, allowPullRequest: true }, gh)).rejects.toMatchObject({ code: 'MISSION_NOT_PROVEN' });
     expect(mission.verdict.complete).toBe(false);
+  });
+
+  it('confirme le SHA distant, met à jour une PR ouverte, et n’appelle pas de modèle', async () => {
+    await setup();
+    await createAndCheckoutFeatureBranch(ctx, project, { name: 'cortex/mission-vue', confirm: true });
+    await gitOk(project, ['update-ref', 'refs/remotes/origin/cortex/mission-vue', 'HEAD']);
+    const head = (await gitOk(project, ['rev-parse', 'HEAD'])).trim();
+    const view = JSON.stringify({ url: 'https://github.com/example/fixture/pull/11', state: 'OPEN', headRefOid: head });
+    const gh = vi.fn(async (_executable: string, args: string[]): Promise<Execution> => {
+      if (args[0] === 'auth') return done({ output: 'logged in\n', exitCode: 0 });
+      if (args[1] === 'view') return done({ output: view, exitCode: 0 });
+      if (args[1] === 'edit') return done({ output: 'edited\n', exitCode: 0 });
+      return done({ output: 'create ne doit pas partir', exitCode: 1 });
+    });
+    const opened = await openPullRequest(ctx, project, { base: 'main', title: 'Mission', body: 'Mise à jour sans fusion.', confirm: true, allowPullRequest: true }, gh);
+    expect(opened).toMatchObject({ url: 'https://github.com/example/fixture/pull/11', state: 'OPEN', remoteCertified: true, merged: false, forced: false });
+    const calls = gh.mock.calls as unknown as [string, string[]][];
+    expect(calls.some((call) => call[1]?.[1] === 'edit')).toBe(true);
+    expect(calls.some((call) => call[1]?.includes('create') || call[1]?.includes('merge') || call[1]?.includes('--force'))).toBe(false);
+    expect(ctx.prompt).not.toHaveBeenCalled();
+    expect((await publishStatus(ctx, project)).remoteCertified).toBe(true);
+    await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'corps', confirm: true, allowPush: true }, gh)).rejects.toThrow();
+    await expect(commitPaths(ctx, project, { message: 'feat: sans droit', paths: ['README.md'], confirm: true })).rejects.toThrow();
+    const leaked = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const denied = vi.fn(async (): Promise<Execution> => done({ output: `auth ${leaked}`, exitCode: 1 }));
+    await expect(openPullRequest(ctx, project, { title: 'Mission', body: 'corps', confirm: true, allowPullRequest: true }, denied)).rejects.toThrow();
+    expect(JSON.stringify(ctx.store.all('publish-log', project.id))).not.toContain(leaked);
   });
 
   it('retire l’état prouvé quand un test plus récent échoue', async () => {

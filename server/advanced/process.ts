@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import type { Express } from 'express';
@@ -70,4 +71,31 @@ export async function gitOk(p: Project, args: string[], maxOutput?: number): Pro
   if (r.exitCode !== 0 || r.truncated || r.timedOut) throw new AdvancedError(409, 'GIT_FAILED', r.output || 'Commande Git échouée ou bornée.');
   return r.output;
 }
-export const githubEnvironment = () => ({ ...safeEnvironment(os.homedir()), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' });
+function operatorToolchainPath(): string {
+  const allowed = new Set(safeToolchainPath().split(path.delimiter));
+  const ordered: string[] = [];
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (allowed.has(dir) && !ordered.includes(dir)) ordered.push(dir);
+  }
+  for (const dir of allowed) if (!ordered.includes(dir)) ordered.push(dir);
+  return ordered.join(path.delimiter);
+}
+export function gitPushEnvironment(): NodeJS.ProcessEnv {
+  const env = gitEnvironment();
+  // Keep the operator PATH order so a later toolchain directory cannot shadow gh.
+  env.PATH = operatorToolchainPath();
+  const name = process.env.GH_TOKEN ? 'GH_TOKEN' : process.env.GITHUB_TOKEN ? 'GITHUB_TOKEN' : '';
+  if (name) env[name] = process.env[name];
+  // Helper expands through gh. The token is not placed in argv or in a file.
+  env.GIT_CONFIG_COUNT = '1';
+  env.GIT_CONFIG_KEY_0 = 'credential.helper';
+  env.GIT_CONFIG_VALUE_0 = '!gh auth git-credential';
+  return env;
+}
+export const githubEnvironment = (): NodeJS.ProcessEnv => {
+  const env: NodeJS.ProcessEnv = { ...safeEnvironment(os.homedir()), PATH: operatorToolchainPath(), GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1' };
+  // The sanitized environment would otherwise hide the CLI credential. The value is never written to the store.
+  if (process.env.GH_TOKEN) env.GH_TOKEN = process.env.GH_TOKEN;
+  else if (process.env.GITHUB_TOKEN) env.GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+  return env;
+};

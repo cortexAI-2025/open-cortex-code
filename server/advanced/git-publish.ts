@@ -5,7 +5,7 @@ import type { Project } from '../../shared/contracts.js';
 import { isSensitivePath } from '../security.js';
 import { AdvancedError, type Context, all, confirmed, id, label, now, project, redact, relativePath, route, safePath, trusted, withProjectLock } from './common.js';
 import { presentMission, type Mission } from './mission.js';
-import { execute, git, gitOk, githubEnvironment, type Execution, type RunOptions } from './process.js';
+import { execute, git, gitOk, githubEnvironment, gitPushEnvironment, type Execution, type RunOptions } from './process.js';
 
 const PROTECTED = new Set(['main', 'master', 'gh-pages', 'trunk', 'head']);
 
@@ -69,12 +69,19 @@ export interface PublishRecord {
   url: string | null;
   phase: 'commit' | 'push' | 'pull-request' | 'prepare' | 'failed';
   detail: string;
-  remoteCertified: false;
+  remoteCertified: boolean;
   createdAt: string;
 }
 
-function remember(ctx: Context, p: Project, record: Omit<PublishRecord, 'id' | 'projectId' | 'createdAt' | 'remoteCertified'>): PublishRecord {
-  const stored: PublishRecord = { id: id(), projectId: p.id, createdAt: now(), remoteCertified: false, ...record, detail: redact(ctx, record.detail) };
+function scrub(ctx: Context, text: string): string {
+  const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
+  const redacted = redact(ctx, text).replace(/\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]+/g, '[REDACTED]');
+  return token ? redacted.split(token).join('[REDACTED]') : redacted;
+}
+
+function remember(ctx: Context, p: Project, record: Omit<PublishRecord, 'id' | 'projectId' | 'createdAt' | 'remoteCertified'> & { remoteCertified?: boolean }): PublishRecord {
+  const { remoteCertified, ...rest } = record;
+  const stored: PublishRecord = { id: id(), projectId: p.id, createdAt: now(), ...rest, remoteCertified: remoteCertified === true, detail: scrub(ctx, rest.detail) };
   return ctx.store.put('publish-log', stored, p.id);
 }
 
@@ -121,6 +128,7 @@ export async function commitPaths(ctx: Context, p: Project, input: unknown): Pro
     message: z.string().trim().min(1).max(500).refine((value) => !value.includes('\0') && !value.startsWith('-') && !/[\r\n]/u.test(value)),
     paths: z.array(z.string().min(1).max(500)).min(1).max(40),
     confirm: z.literal(true),
+    allowCommit: z.literal(true),
   }).strict().parse(input);
   return withProjectLock(p.id, async () => {
     trusted(ctx.project(p.id));
@@ -165,14 +173,14 @@ export async function pushFeatureBranch(ctx: Context, p: Project, input: unknown
       remember(ctx, p, { branch, files: [], pushed: false, url: null, phase: 'failed', detail: auth.output || 'gh non authentifié.' });
       throw new AdvancedError(503, 'GH_AUTH_REQUIRED', redact(ctx, auth.output || 'gh n’est pas authentifié. Aucun push.'));
     }
-    const result = await (pushGit ?? ((pushArgs: string[]) => git(p, pushArgs)))(args);
+    const result = await (pushGit ?? ((pushArgs: string[]) => execute('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.pager=cat', '-c', 'diff.external=', ...pushArgs], { cwd: p.path, env: gitPushEnvironment(), timeoutMs: 60_000, maxOutput: 64 * 1024 })))(args);
     if (result.exitCode !== 0 || result.timedOut || result.truncated) {
       remember(ctx, p, { branch, files: [], pushed: false, url: null, phase: 'failed', detail: result.output || 'Push refusé.' });
-      throw new AdvancedError(502, 'GIT_PUSH_FAILED', redact(ctx, result.output || 'Push refusé. Aucun --force n’a été utilisé.'));
+      throw new AdvancedError(502, 'GIT_PUSH_FAILED', scrub(ctx, result.output || 'Push refusé. Aucun --force n’a été utilisé.'));
     }
     remember(ctx, p, { branch, files: [], pushed: true, url: null, phase: 'push', detail: `${branch} poussée sans --force.` });
     ctx.history(p.id, 'push', 'Push non forcé', branch);
-    return { ok: true, branch, pushed: true, forced: false, merged: false, remoteCertified: false, output: redact(ctx, result.output.trim()) };
+    return { ok: true, branch, pushed: true, forced: false, merged: false, remoteCertified: false, output: scrub(ctx, result.output.trim()) };
   });
 }
 
@@ -191,48 +199,82 @@ async function assertRemoteHeadMatches(p: Project, branch: string): Promise<void
   }
 }
 
-export async function openPullRequest(ctx: Context, p: Project, input: unknown, run: CommandRunner = execute): Promise<{ ok: true; url: string | null; branch: string; base: string; merged: false; forced: false; remoteCertified: false; output: string }> {
+interface PullView { url: string; state: string; headRefOid: string }
+
+function parsePullView(output: string): PullView | null {
+  try {
+    const value = JSON.parse(output) as { url?: unknown; state?: unknown; headRefOid?: unknown };
+    if (typeof value.url !== 'string' || !value.url.startsWith('https://github.com/')) return null;
+    if (typeof value.state !== 'string' || !value.state) return null;
+    if (typeof value.headRefOid !== 'string' || !/^[0-9a-f]{40}$/.test(value.headRefOid)) return null;
+    return { url: value.url, state: value.state, headRefOid: value.headRefOid };
+  } catch { return null; }
+}
+
+function viewArgs(repo: string, head: string): string[] {
+  return ['pr', 'view', head, '--repo', repo, '--json', 'url,state,headRefOid'];
+}
+
+export async function openPullRequest(ctx: Context, p: Project, input: unknown, run: CommandRunner = execute): Promise<{ ok: true; url: string | null; state: string | null; branch: string; base: string; merged: false; forced: false; remoteCertified: boolean; output: string }> {
   confirmed(input); trusted(p);
   const body = z.object({
     base: z.string().trim().min(1).max(200).default('main'),
     title: label,
     body: z.string().trim().min(1).max(16_000),
     confirm: z.literal(true),
-    allowPush: z.literal(true),
+    allowPullRequest: z.literal(true),
   }).strict().parse(input);
   return withProjectLock(p.id, async () => {
     trusted(ctx.project(p.id));
     const head = assertFeatureBranch(await currentBranch(p));
     if (!provenMissionExists(ctx, p)) throw new AdvancedError(409, 'MISSION_NOT_PROVEN', 'Une mission du projet est ouverte et aucune n’est prouvée. Pas de pull request.');
     await assertRemoteHeadMatches(p, head);
+    const local = (await gitOk(p, ['rev-parse', 'HEAD'])).trim();
     const remote = (await gitOk(p, ['remote', 'get-url', 'origin'])).trim();
     const repo = githubRepositoryFromRemote(remote);
-    const args = buildPullRequestArgs({ repo, base: body.base, head, title: body.title, body: body.body });
-    if (args.some((arg) => arg === '--force' || arg === '--force-with-lease' || arg === 'merge' || arg === 'pr merge')) {
+    const createArgs = buildPullRequestArgs({ repo, base: body.base, head, title: body.title, body: body.body });
+    if (createArgs.some((arg) => arg === '--force' || arg === '--force-with-lease' || arg === 'merge' || arg === 'pr merge')) {
       throw new AdvancedError(500, 'PR_POLICY', 'Construction d’arguments interdite.');
     }
     let auth: Execution;
     try { auth = await run('gh', ['auth', 'status', '--hostname', 'github.com'], { cwd: p.path, env: githubEnvironment(), timeoutMs: 15_000, maxOutput: 32_000 }); }
-    catch (error) { throw new AdvancedError(503, 'GH_UNAVAILABLE', redact(ctx, error instanceof Error ? error.message : 'CLI gh indisponible.')); }
+    catch (error) { throw new AdvancedError(503, 'GH_UNAVAILABLE', scrub(ctx, error instanceof Error ? error.message : 'CLI gh indisponible.')); }
     if (auth.exitCode !== 0 || auth.timedOut || auth.truncated) {
       remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url: null, phase: 'failed', detail: auth.output || 'gh non authentifié.' });
-      throw new AdvancedError(503, 'GH_AUTH_REQUIRED', redact(ctx, auth.output || 'gh n’est pas authentifié. Aucune PR.'));
+      throw new AdvancedError(503, 'GH_AUTH_REQUIRED', scrub(ctx, auth.output || 'gh n’est pas authentifié. Aucune PR.'));
     }
-    let result: Execution;
-    try {
-      result = await run('gh', args, { cwd: p.path, env: githubEnvironment(), timeoutMs: 20_000, maxOutput: 64 * 1024 });
-    } catch (error) {
-      throw new AdvancedError(503, 'GH_UNAVAILABLE', redact(ctx, error instanceof Error ? error.message : 'CLI gh indisponible.'));
+    const looked = await run('gh', viewArgs(repo, head), { cwd: p.path, env: githubEnvironment(), timeoutMs: 20_000, maxOutput: 64 * 1024 });
+    const existing = looked.exitCode === 0 && !looked.timedOut && !looked.truncated ? parsePullView(looked.output) : null;
+    let createdUrl: string | null = null;
+    if (existing && existing.state !== 'OPEN') {
+      remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url: existing.url, phase: 'failed', detail: `PR ${existing.state}. Aucune réouverture.` });
+      throw new AdvancedError(409, 'PR_NOT_OPEN', `La pull request est ${existing.state}. Elle n’est pas rouverte ni fusionnée.`);
     }
-    const output = redact(ctx, result.output.trim());
-    if (result.exitCode !== 0 || result.timedOut || result.truncated) {
-      remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url: null, phase: 'failed', detail: output || 'gh pr create a échoué.' });
-      throw new AdvancedError(502, 'PR_CREATE_FAILED', output || 'gh pr create a échoué. Aucune PR n’est considérée ouverte.');
+    if (existing) {
+      const edited = await run('gh', ['pr', 'edit', head, '--repo', repo, '--title', body.title, '--body', body.body], { cwd: p.path, env: githubEnvironment(), timeoutMs: 20_000, maxOutput: 64 * 1024 });
+      if (edited.exitCode !== 0 || edited.timedOut || edited.truncated) {
+        remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url: existing.url, phase: 'failed', detail: edited.output || 'gh pr edit a échoué.' });
+        throw new AdvancedError(502, 'PR_UPDATE_FAILED', scrub(ctx, edited.output || 'Mise à jour de la PR refusée. Aucune fusion.'));
+      }
+    } else {
+      let result: Execution;
+      try { result = await run('gh', createArgs, { cwd: p.path, env: githubEnvironment(), timeoutMs: 20_000, maxOutput: 64 * 1024 }); }
+      catch (error) { throw new AdvancedError(503, 'GH_UNAVAILABLE', scrub(ctx, error instanceof Error ? error.message : 'CLI gh indisponible.')); }
+      const output = scrub(ctx, result.output.trim());
+      if (result.exitCode !== 0 || result.timedOut || result.truncated) {
+        remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url: null, phase: 'failed', detail: output || 'gh pr create a échoué.' });
+        throw new AdvancedError(502, 'PR_CREATE_FAILED', output || 'gh pr create a échoué. Aucune PR n’est considérée ouverte.');
+      }
+      createdUrl = output.split('\n').map((line) => line.trim()).find((line) => line.startsWith('https://github.com/')) ?? null;
     }
-    const url = output.split('\n').map((line) => line.trim()).find((line) => line.startsWith('https://github.com/')) ?? null;
-    remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url, phase: 'pull-request', message: body.title, detail: `${head} → ${body.base}; ${url ?? 'URL absente'}` });
-    ctx.history(p.id, 'pull-request', 'Pull request demandée (jamais fusionnée, publication non certifiée hors sortie gh)', `${head} → ${body.base}; ${url ?? 'URL absente de la sortie gh'}`);
-    return { ok: true, url, branch: head, base: assertBranchToken(body.base), merged: false, forced: false, remoteCertified: false, output };
+    const viewed = await run('gh', viewArgs(repo, head), { cwd: p.path, env: githubEnvironment(), timeoutMs: 20_000, maxOutput: 64 * 1024 });
+    const confirmedView = viewed.exitCode === 0 && !viewed.timedOut && !viewed.truncated ? parsePullView(viewed.output) : null;
+    const remoteCertified = !!confirmedView && confirmedView.state === 'OPEN' && confirmedView.headRefOid === local;
+    const url = confirmedView?.url ?? createdUrl ?? existing?.url ?? null;
+    const state = confirmedView?.state ?? null;
+    remember(ctx, p, { branch: head, base: body.base, files: [], pushed: false, url, phase: 'pull-request', message: body.title, remoteCertified, detail: `${head} → ${body.base}; état=${state ?? 'non confirmé'}; certifié=${remoteCertified}; ${url ?? 'URL absente'}` });
+    ctx.history(p.id, 'pull-request', remoteCertified ? 'Pull request confirmée par gh, non fusionnée' : 'Pull request demandée, distant non confirmé', `${head} → ${body.base}; ${url ?? 'URL absente'}`);
+    return { ok: true, url, state, branch: head, base: assertBranchToken(body.base), merged: false, forced: false, remoteCertified, output: scrub(ctx, confirmedView ? JSON.stringify({ url: confirmedView.url, state: confirmedView.state, headRefOid: confirmedView.headRefOid }) : createdUrl ?? '') };
   });
 }
 
@@ -266,14 +308,15 @@ export async function preparePullRequest(ctx: Context, p: Project, input: unknow
   });
 }
 
-export async function publishStatus(ctx: Context, p: Project): Promise<{ currentBranch: string; headFiles: string[]; latest: PublishRecord | null; remoteCertified: false }> {
+export async function publishStatus(ctx: Context, p: Project): Promise<{ currentBranch: string; headFiles: string[]; latest: PublishRecord | null; remoteCertified: boolean }> {
   const latest = all<PublishRecord>(ctx, 'publish-log', p.id).at(-1) ?? null;
+  const remoteCertified = latest?.remoteCertified === true;
   try {
     const currentBranch = (await gitOk(p, ['branch', '--show-current'])).trim();
     const headFiles = (await gitOk(p, ['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'])).split('\n').map((file) => file.trim()).filter(Boolean);
-    return { currentBranch, headFiles, latest, remoteCertified: false };
+    return { currentBranch, headFiles, latest, remoteCertified };
   } catch {
-    return { currentBranch: '', headFiles: [], latest, remoteCertified: false };
+    return { currentBranch: '', headFiles: [], latest, remoteCertified };
   }
 }
 

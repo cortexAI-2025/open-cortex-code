@@ -24,6 +24,7 @@ interface MissionView {
   permissions?: { action: string; resources: string[]; decision: string }[];
 }
 interface ResumeResult { brief: string; estimatedTokens: number; submitted: false; truncated: boolean }
+interface PublishState { currentBranch: string; remoteCertified: boolean; latest: { phase: string; branch: string; url: string | null; pushed: boolean; message?: string; remoteCertified: boolean } | null }
 
 export function MissionBoard() {
   const { api } = useConnection();
@@ -31,6 +32,7 @@ export function MissionBoard() {
   const { projectId, project } = useWorkspace();
   const { act, confirm } = useAppActions();
   const missions = useResource<MissionView[]>(api, projectId ? projectRoute(projectId, 'missions') : null, 8000);
+  const publication = useResource<PublishState>(api, projectId ? projectRoute(projectId, 'git/publish') : null, 8000);
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('');
   const [profile, setProfile] = useState('');
@@ -60,7 +62,9 @@ export function MissionBoard() {
       const profileName = bootstrap?.profiles.find((item) => item.id === mission.profileId)?.name;
       const touched = [...new Set(mission.repairs?.flatMap((item) => item.applied) ?? [])];
       const tokens = (mission.repairs ?? []).reduce((sum, item) => ({ input: sum.input + (item.tokens?.input ?? 0), output: sum.output + (item.tokens?.output ?? 0) }), { input: 0, output: 0 });
+      const reviewer = mission.roles?.filter((item) => item.role === 'reviewer').at(-1);
       const active = [...(mission.roles ?? [])].reverse().find((item) => item.role === 'coder') ?? mission.roles?.at(-1);
+      const publicationState = publication.data;
       return <article key={mission.id} className="agent-record"><div className="panel-title"><h3>{mission.title}</h3><span className="badge">{mission.verdict.label || mission.verdict.status}</span></div>
       <p>{mission.goal}</p>
       <p className="small">Verdict : {mission.verdict.label || (mission.verdict.complete ? 'PROVEN' : 'non prouvé')} · {mission.evidence.length} test(s) · tentative {last?.index ?? 0}/3 · politique tests {mission.testPolicy || 'deny'}</p>
@@ -68,7 +72,9 @@ export function MissionBoard() {
       <p className="small">Fichiers modifiés : {touched.join(', ') || 'aucun'} · jetons mission {tokens.input}/{tokens.output}{last?.budgetMs ? ` · budget ${last.budgetMs} ms` : ''}</p>
       {mission.plan && mission.plan.length > 0 && <p className="small">Plan : {mission.plan.map((item) => `${item.role} ${item.status}`).join(' · ')}</p>}
       {mission.permissions && mission.permissions.length > 0 && <p className="small">Permissions : {mission.permissions.map((item) => `${item.decision} ${item.action} ${item.resources.join(', ')}`).join(' · ')}</p>}
-      {mission.summary && <pre className="result-json">{mission.summary}</pre>}
+      {reviewer && <p className="small">Reviewer : {reviewer.summary}</p>}
+      <p className="small">Branche : {publicationState?.currentBranch || 'inconnue'} · publication : {publicationState?.latest ? `${publicationState.latest.phase} · poussée ${publicationState.latest.pushed ? 'oui' : 'non'} · distante ${publicationState.remoteCertified ? 'confirmée' : 'non'}` : 'aucune'}{publicationState?.latest?.message ? ` · ${publicationState.latest.message}` : ''}</p>
+      {publicationState?.latest?.url && <p className="small"><a href={publicationState.latest.url}>{publicationState.latest.url}</a></p>}
       <ul className="delivery-limits">{mission.verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
       {mission.evidence.map((item, index) => <p className="small" key={`${item.command}-${index}`}>Test {index + 1} : exit {item.exitCode ?? 'absent'} · {item.command}</p>)}
       {mission.repairs?.map((repair, index) => <p className="small" key={`${repair.index}-${index}`}>Tentative {repair.index}/3 : exit {repair.exitCode ?? 'absent'} · {repair.stopped || 'correctif non encore revérifié'}{repair.applied.length ? ` · ${repair.applied.join(', ')}` : ''}</p>)}
