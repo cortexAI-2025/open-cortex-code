@@ -10,6 +10,8 @@ Le moteur OpenCode et le connecteur s'exécutent sur l'appareil de l'utilisateur
 
 Les permissions de l'agent et les worktrees **ne constituent pas un sandbox OS**. N'exécutez que des projets de confiance; les commandes disposent des droits du compte utilisateur. Le pairing facultatif depuis une origine HTTPS est fermé par défaut, doit être activé localement et n'est pas certifié sur de vrais navigateurs.
 
+L'espace **Équipe IA** pilote le CTO IA d'AiWorkPay (missions, approbations, preuves) : voir [docs/equipe-ia-cto.md](docs/equipe-ia-cto.md).
+
 Consulter les guides de [l'architecture](docs/architecture.md), de [l'utilisation](docs/utilisation.md), de [la sécurité](docs/securite.md), du [pairing HTTPS vers loopback](docs/pairing-https-loopback.md) et le [contrat API du connecteur](docs/contrat-connecteur.md). La licence MIT d'OpenCode est conservée dans [`docs/licenses/OPENCODE-MIT.txt`](docs/licenses/OPENCODE-MIT.txt).
 
 ## Prérequis

@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { AgentMode, Bootstrap, CortexSession, Project } from '../shared/contracts';
 import { LocalApi, errorText, isLoopback, parseConnection, type Connection } from './api';
 
-export type View = 'dashboard' | 'projects' | 'editor' | 'sessions' | 'agents' | 'models' | 'integrations' | 'skills' | 'automations' | 'memory' | 'history' | 'delivery' | 'settings';
+export type View = 'dashboard' | 'projects' | 'editor' | 'sessions' | 'agents' | 'models' | 'integrations' | 'skills' | 'automations' | 'memory' | 'history' | 'delivery' | 'team' | 'settings';
 export const viewLabels: Record<View, string> = {
-    dashboard: 'Vue d’ensemble', projects: 'Projets', editor: 'Éditeur', sessions: 'Sessions', agents: 'Agents parallèles', models: 'Modèles & clés', integrations: 'MCP & API', skills: 'Skills', automations: 'Automatisations', memory: 'Mémoire & connaissances', history: 'Historique', delivery: 'Livraison', settings: 'Connexion & paramètres',
+    dashboard: 'Vue d’ensemble', projects: 'Projets', editor: 'Éditeur', sessions: 'Sessions', agents: 'Agents parallèles', models: 'Modèles & clés', integrations: 'MCP & API', skills: 'Skills', automations: 'Automatisations', memory: 'Mémoire & connaissances', history: 'Historique', delivery: 'Livraison', team: 'Équipe IA', settings: 'Connexion & paramètres',
 };
 
 interface Notice {

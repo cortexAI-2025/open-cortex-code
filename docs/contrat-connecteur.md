@@ -38,3 +38,8 @@ Toutes les routes `/api/*` sauf `/api/health` exigent `Authorization: Bearer <pa
 ## Interface d'intégration backend / avancés
 
 Le noyau exporte dans `server/context.ts` un `ConnectorContext`. Contrat prévu : `store.all<T>(kind,projectId?)`, `store.get<T>(kind,id)`, `store.put<T extends {id:string}>(kind,value,projectId?)`, `store.remove(kind,id)`; `ctx.project(id):Project` validé; `ctx.vault.set(id,secret)`, `get(id)`, `delete(id)`, `redact(text)`; `ctx.engine.request(projectId,method,path,body?,profileId?)` requête au moteur contrôlé côté backend seulement; `ctx.createSession(projectId,{title,profileId,mode})`, `ctx.prompt(sessionId,{text,profileId,mode,confirmProviderChange?})`; `ctx.history(projectId,kind,title,detail)`. Avancés exporte `registerAdvancedRoutes(app:Express,ctx:ConnectorContext):void` dans `server/routes-advanced.ts` et n'initialise aucun service à l'import.
+
+
+## Équipe IA (CTO IA)
+
+`GET /api/cto/team`, `POST /api/cto/register`, `GET|POST /api/projects/:id/cto/missions`, `GET /api/projects/:id/cto/missions/:missionId` et `POST …/approvals|cancel|resume`. Voir [equipe-ia-cto.md](equipe-ia-cto.md). Configuration serveur seulement (`CORTEX_CTO_URL`, `CORTEX_CTO_TOKEN`) ; mutations avec `confirm:true` ; `CTO_BLOCKED` si l'isolation n'est pas réellement disponible.
