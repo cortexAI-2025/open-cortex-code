@@ -1,6 +1,7 @@
 # Exécution sécurisée
 
-Phase 6 ajoute une couche devant OpenCode et le runtime multi-agents. Elle ne les remplace pas.
+Phase 6 ajoute une couche devant OpenCode et le runtime multi-agents. Elle ne les remplace pas. Le contrat de mission est décrit dans [mission-integrity.md](mission-integrity.md). Un résumé ne peut pas le remplacer.
+
 
 ## Adaptateurs
 

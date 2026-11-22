@@ -4,6 +4,7 @@ import type { Profile, Project } from '../../shared/contracts.js';
 import { AdvancedError, type Context, aiText, all, confirmed, id, label, now, owned, param, project, redact, requireProfile, route, trusted } from './common.js';
 import { packContext, modelHandoff, type ContextItem } from './context-budget.js';
 import { detectClaimConflicts, type FileClaim, type PathConflict } from './conflicts.js';
+import { authorizeOperation } from './mission-integrity.js';
 import type { StoredCommand } from './process.js';
 
 export type MissionStatus = 'active' | 'blocked' | 'needs-evidence' | 'proven' | 'failed' | 'cancelled';
@@ -224,6 +225,9 @@ export function updateMissionClaims(ctx: Context, p: Project, missionId: string,
   }).strict().parse(input);
   const mission = owned<Mission>(ctx, 'missions', missionId, p.id);
   if (mission.status === 'cancelled') throw new AdvancedError(409, 'MISSION_CLOSED', 'Mission annulée.');
+  const paths = body.claims.flatMap((claim) => claim.paths);
+  const gate = authorizeOperation(ctx, p, missionId, { source: 'user', action: 'write', paths });
+  if (!gate.allowed) throw new AdvancedError(409, gate.code, gate.reason);
   mission.claims = body.claims;
   mission.conflicts = detectClaimConflicts(body.claims);
   const view = save(ctx, mission);

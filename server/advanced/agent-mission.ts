@@ -11,6 +11,7 @@ import { normalizeClaimPath, type FileClaim } from './conflicts.js';
 import { isProtectedBranch } from './git-publish.js';
 import { buildMissionPlan, missionLabel, presentMission, storeMission, summarizeMission, type Mission, type MissionPermission, type MissionPlanItem, type RepairAttempt, type RoleTrace, type TestPolicy } from './mission.js';
 import { git, gitOk, runCommand } from './process.js';
+import { authorizeOperation } from './mission-integrity.js';
 import { guardModelCall, leaveProvider, observeProviderFailure, recordModelUse, recordProviderSuccess } from './provider-resilience.js';
 import { assertRepairCommand, diagnoseFailure, isEvidencePath, pathInScope, weakensTests } from './repair.js';
 import { changedPaths } from './worktree-claims.js';
@@ -367,6 +368,16 @@ export async function runAgentMission(ctx: Context, target: Project, missionId: 
     if (!current.claims.some((claim) => claim.paths.length)) {
       repairs.push(attempt({ ...base, index, exitCode: null, diagnosis: 'Aucun fichier revendiqué. OpenCode n’est pas lancé.', invoked: false, stopped: 'blocked' }));
       break;
+    }
+    if (ctx.store.get('mission-contracts', missionId)) {
+      const live = await git(target, ['branch', '--show-current']);
+      const liveBranch = live.exitCode === 0 && !live.timedOut && !live.truncated ? live.output.trim() : '';
+      const gate = authorizeOperation(ctx, target, missionId, { source: 'agent', action: 'write', paths: current.claims.flatMap((claim) => claim.paths), branch: liveBranch, repository: target.path });
+      if (!gate.allowed) {
+        note('reviewer', gate.reason);
+        repairs.push(attempt({ ...base, index, exitCode: null, diagnosis: gate.reason, invoked: false, stopped: 'blocked' }));
+        break;
+      }
     }
     const before = await capture(target, current.claims.flatMap((claim) => claim.paths));
     const turn = await driver({ mission: { ...current, testPolicy: body.testPolicy }, diagnosis, attempt: index, sessionId, deadline: started + body.budgetMs, clock, cancelled: () => owned<Mission>(ctx, 'missions', missionId, target.id).status === 'cancelled', testPolicy: body.testPolicy, map });

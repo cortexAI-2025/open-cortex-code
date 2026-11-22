@@ -6,6 +6,7 @@ import { AdvancedError, type Context, all, confirmed, id, now, param, project, r
 import { commandVerdict, certificationPlan, type CertStatus, type CommandProof } from './certification.js';
 import { decideCommand, decidePath, dockerRunArgs, defaultPolicy, type ExecutionPolicy } from './execution-policy.js';
 import { acquireLease, finishLease } from './resilience.js';
+import { authorizeOperation } from './mission-integrity.js';
 import { execute, safeEnvironment, type Execution } from './process.js';
 
 export interface SecureRun {
@@ -140,6 +141,16 @@ export async function executeSecure(ctx: Context, target: Project, missionId: st
       record.output = pathDecision.reason;
       return ctx.store.put('executions', record, target.id);
     }
+  }
+  const integrity = authorizeOperation(ctx, target, missionId, {
+    source: 'agent', action: 'execute', repository: target.path,
+    paths: parsed.command.trim().split(/\s+/).slice(1).filter((part) => !part.startsWith('-')),
+  });
+  if (!integrity.allowed) {
+    record.verdict = 'BLOCKED';
+    record.output = integrity.reason;
+    record.decisions.push({ code: integrity.code, allowed: false, reason: integrity.reason });
+    return ctx.store.put('executions', { ...record, output: redact(ctx, record.output) }, target.id);
   }
   const lease = acquireLease(ctx, { projectId: target.id, missionId, taskKey: parsed.taskKey ?? 'command', ttlMs: policy.timeoutMs + 2_000, invalidated: parsed.invalidated, idempotencyKey: `${target.id}:${missionId}:${parsed.taskKey ?? parsed.command}` }, options.clock);
   if (!lease.ok) {

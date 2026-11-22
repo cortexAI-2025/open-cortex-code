@@ -62,6 +62,16 @@ interface SecureRunView {
 }
 interface CertView { id: string; title: string; status: string; reason: string; certified: boolean }
 interface LeaseView { missionId: string; taskKey: string; status: string; attempts: number; checkpoint: string; exactlyOnce: false }
+interface ContractView {
+  id: string;
+  version: number;
+  repository: string;
+  branch: string;
+  objective: string;
+  intact: boolean;
+  permissions: { allowCommit: boolean; allowPush: boolean; allowPullRequest: boolean };
+  decisions: { code: string; allowed: boolean; reason: string }[];
+}
 
 export function MissionBoard() {
   const { api } = useConnection();
@@ -75,6 +85,7 @@ export function MissionBoard() {
   const executions = useResource<SecureRunView[]>(api, projectId ? projectRoute(projectId, 'executions') : null, 8000);
   const certifications = useResource<CertView[]>(api, projectId ? projectRoute(projectId, 'certifications') : null, 15000);
   const resilience = useResource<{ leases: LeaseView[]; abandoned: LeaseView[] }>(api, projectId ? projectRoute(projectId, 'resilience') : null, 8000);
+  const contracts = useResource<ContractView[]>(api, projectId ? projectRoute(projectId, 'contracts') : null, 8000);
   const [title, setTitle] = useState('');
   const [goal, setGoal] = useState('');
   const [profile, setProfile] = useState('');
@@ -102,6 +113,7 @@ export function MissionBoard() {
     executions.refresh();
     certifications.refresh();
     resilience.refresh();
+    contracts.refresh();
     setBusy(false);
   };
 
@@ -121,6 +133,8 @@ export function MissionBoard() {
       const runtime = runtimes.data?.find((item) => item.missionId === mission.id);
       const execution = executions.data?.filter((item) => item.missionId === mission.id).at(-1);
       const leases = resilience.data?.leases.filter((item) => item.missionId === mission.id) ?? [];
+      const contract = contracts.data?.find((item) => item.id === mission.id);
+      const refusal = contract?.decisions.filter((item) => !item.allowed).at(-1);
       const budgetSpent = tokens.input + tokens.output;
       return <article key={mission.id} className="agent-record"><div className="panel-title"><h3>{mission.title}</h3><span className="badge">{mission.verdict.label || mission.verdict.status}</span></div>
       <p>{mission.goal}</p>
@@ -143,6 +157,9 @@ export function MissionBoard() {
       {execution?.decisions.at(-1) && <p className="small">Décision : {execution.decisions.at(-1)?.code} · {execution.decisions.at(-1)?.reason}</p>}
       {execution?.output && <p className="small">Sortie : {execution.output.slice(0, 240)}</p>}
       {leases.length > 0 && <p className="small">Reprise : {leases.map((item) => `${item.taskKey} ${item.status} · essai ${item.attempts} · checkpoint ${item.checkpoint} · exactement une fois non`).join(' · ')}{resilience.data?.abandoned.some((item) => item.missionId === mission.id) ? ' · abandon détecté' : ''}</p>}
+      {contract ? <p className="small">Contrat v{contract.version} · intégrité {contract.intact ? 'conforme' : 'altérée'} · branche {contract.branch} · dépôt {contract.repository} · commit {contract.permissions.allowCommit ? 'oui' : 'non'} · push {contract.permissions.allowPush ? 'oui' : 'non'} · pull request {contract.permissions.allowPullRequest ? 'oui' : 'non'}</p> : <p className="small">Aucun contrat scellé. Un résumé de conversation ne remplace pas l’instruction originale.</p>}
+      {contract && <p className="small">Objectif autorisé : {contract.objective}</p>}
+      {refusal && <p className="small">Refus hors mission : {refusal.code} · {refusal.reason}</p>}
       <p className="small">Jetons consommés {budgetSpent}. Budget restant : non chiffré ici tant qu’une limite de mission n’est pas dépassée côté serveur. Coût : tarif indisponible.</p>
       {publicationState?.latest?.url && <p className="small"><a href={publicationState.latest.url}>{publicationState.latest.url}</a></p>}
       <ul className="delivery-limits">{mission.verdict.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
@@ -166,6 +183,8 @@ export function MissionBoard() {
       <button className="secondary" disabled={!api || !projectId} onClick={() => void post(`missions/${mission.id}/runtime/cancel`, {}, 'Annuler le runtime ?', 'Les tâches restantes sont annulées. Rien n’est publié.')}>Annuler le runtime</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/execute`, { command: testCommand, isolation: 'local' }, 'Exécuter en local non isolé ?', 'Ce runtime n’est pas un sandbox. Le résultat ne peut pas être CERTIFIED. Réseau, mémoire et capabilities ne sont pas confinés.')}>Exécuter en local non isolé</button>
       <button className="secondary" disabled={busy} onClick={() => void post(`missions/${mission.id}/execute`, { command: testCommand, isolation: 'required' }, 'Exiger une isolation ?', 'Si Docker n’est pas réellement disponible, la mission reste BLOCKED_SANDBOX. Il n’y a pas de bascule vers le runtime local.')}>Exiger une isolation</button>
+      <button className="secondary" disabled={busy || Boolean(contract)} onClick={() => { const scope = claims.split('\n').flatMap((line) => line.trim().split(/\s+/).slice(1)).filter(Boolean); void post(`missions/${mission.id}/contract`, { branch: publication.data?.currentBranch && publication.data.currentBranch !== 'main' ? publication.data.currentBranch : 'cortex/mission', scope: scope.length ? scope : ['src'], acceptance: ['dernier test exit 0'], permissions: { allowCommit: false, allowPush: false, allowPullRequest: false } }, 'Sceller le contrat de mission ?', 'L’instruction actuelle devient la source d’autorité. Un résumé ne pourra pas la changer.'); }}>Sceller le contrat</button>
+      <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const objective = (event.currentTarget.elements.namedItem('objective') as HTMLInputElement).value; void post(`missions/${mission.id}/contract/amend`, { source: 'user', objective }, 'Approuver ce changement d’objectif ?', 'Seul un utilisateur confirmé peut amender le contrat. L’instruction originale est conservée.'); }}><input name="objective" aria-label="Nouvel objectif approuvé" placeholder="Nouvel objectif explicite" required/><button className="secondary" disabled={busy || !contract}>Amender le contrat</button></form>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/orchestrate/publish`, { message: publishMessage, ...grants }, 'Publier avec ces permissions seulement ?', 'Chaque case est une autorisation distincte. Rien n’est fusionné et aucun push forcé n’est émis.'); }}><input aria-label="Message de publication" value={publishMessage} onChange={(event) => setPublishMessage(event.target.value)} required/><label className="small"><input type="checkbox" checked={allowCommit} onChange={(event) => setAllowCommit(event.target.checked)}/> Commit</label><label className="small"><input type="checkbox" checked={allowPush} onChange={(event) => setAllowPush(event.target.checked)}/> Push</label><label className="small"><input type="checkbox" checked={allowPullRequest} onChange={(event) => setAllowPullRequest(event.target.checked)}/> Pull request</label><button className="secondary" type="submit" disabled={busy}>Valider la publication</button><button className="secondary" type="button" disabled={busy} onClick={() => { const grants: Record<string, true> = {}; if (allowCommit) grants.allowCommit = true; if (allowPush) grants.allowPush = true; if (allowPullRequest) grants.allowPullRequest = true; void post(`missions/${mission.id}/runtime/publish`, { message: publishMessage, ...grants }, 'Publier le runtime avec ces permissions seulement ?', 'allowCommit, allowPush et allowPullRequest restent distincts. Rien n’est fusionné et aucun push forcé n’est émis.'); }}>Publier le runtime</button></form>
       <button className="primary" disabled={busy} onClick={() => void post(`missions/${mission.id}/agent`, { command: testCommand, maxAttempts: 3, budgetMs: 180000, testPolicy }, 'Lancer le mode Agent OpenCode ?', 'Aucun fragment avant/après n’est envoyé. La branche courante ne doit pas être main. OpenCode peut modifier le périmètre revendiqué, avec une permission once. Les tests existants restent protégés selon la politique choisie. Trois tentatives au plus, puis les tests du connecteur tranchent. Sans modèle joignable, la mission reste BLOCKED.')}>Corriger avec OpenCode (mode Agent)</button>
       <form className="inline-form" onSubmit={(event) => { event.preventDefault(); const patches = patchPath && patchBefore ? [{ path: patchPath, before: patchBefore, after: patchAfter }] : []; void post(`missions/${mission.id}/repair`, { command: testCommand, maxAttempts: 3, patches }, 'Appliquer un correctif manuel hors moteur ?', 'Ce formulaire n’appelle pas OpenCode. Il reste un filet de secours. Un correctif de test est refusé.'); }}><input aria-label="Commande de test" value={testCommand} onChange={(event) => setTestCommand(event.target.value)} required/><input aria-label="Fichier du correctif" value={patchPath} onChange={(event) => setPatchPath(event.target.value)} placeholder="src/fichier.js"/><input aria-label="Fragment à remplacer" value={patchBefore} onChange={(event) => setPatchBefore(event.target.value)} placeholder="fragment exact"/><input aria-label="Fragment corrigé" value={patchAfter} onChange={(event) => setPatchAfter(event.target.value)} placeholder="remplacement"/><button className="secondary" type="submit" disabled={busy}>Correctif manuel hors moteur</button></form>

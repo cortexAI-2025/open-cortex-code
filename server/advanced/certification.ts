@@ -106,3 +106,22 @@ export function certificationPlan(env: { node: boolean; python: boolean; react: 
   }
   return plans;
 }
+
+export type MatrixStatus = 'CERTIFIED' | 'PASSED_LOCAL' | 'PASSED_UNIT' | 'BLOCKED' | 'FAILED' | 'NOT_TESTED';
+export interface MatrixRow { id: string; status: MatrixStatus; reason: string; certified: false | true }
+
+/** La matrice ne promeut jamais un blocage, un test unitaire ou un succès local en CERTIFIED. */
+export function executionMatrix(input: { docker: boolean; nodeRedExit: number | null; pythonRedExit: number | null; integrityUnit: boolean; crashResume: boolean; providerUnit: boolean }): MatrixRow[] {
+  const rows: MatrixRow[] = [
+    { id: 'mission-integrity', status: input.integrityUnit ? 'PASSED_UNIT' : 'NOT_TESTED', reason: input.integrityUnit ? 'Contrôles déterministes exécutés en test. Aucun sandbox.' : 'Non exécuté.', certified: false },
+    { id: 'crash-resume', status: input.crashResume ? 'PASSED_LOCAL' : 'NOT_TESTED', reason: input.crashResume ? 'Processus arrêté puis mission rechargée. exactlyOnce reste faux. Pas une isolation Docker.' : 'Reprise réelle non exécutée.', certified: false },
+    { id: 'provider-resilience', status: input.providerUnit ? 'PASSED_UNIT' : 'NOT_TESTED', reason: input.providerUnit ? '429, 5xx, timeout, retry et circuit simulés. Aucun nouvel appel fournisseur.' : 'Non exécuté.', certified: false },
+    { id: 'node-typescript', status: 'NOT_TESTED', reason: input.nodeRedExit === 1 ? 'Fixture rouge reproduite (exit 1). Correctif modèle non relancé dans cette phase.' : 'Fixture Node non exécutée.', certified: false },
+    { id: 'react', status: 'BLOCKED', reason: 'Pas de projet React isolé ni de lanceur. Aucune installation et aucun succès simulé.', certified: false },
+    { id: 'next', status: 'BLOCKED', reason: 'Next.js absent. Aucune installation et aucun succès simulé.', certified: false },
+    { id: 'python', status: 'NOT_TESTED', reason: input.pythonRedExit === 1 ? 'unittest rouge reproduit (exit 1). Correctif modèle non lancé.' : 'Fixture Python non exécutée.', certified: false },
+    { id: 'android-gradle', status: 'BLOCKED', reason: 'Gradle ou SDK Android absent. Projet minimal indépendant, aucun PASS.', certified: false },
+    { id: 'docker-sandbox', status: input.docker ? 'NOT_TESTED' : 'BLOCKED', reason: input.docker ? 'Docker présent, runner non utilisé pour un correctif modèle.' : 'Docker absent. Aucune bascule vers le runtime local et aucun CERTIFIED.', certified: false },
+  ];
+  return rows.map((row) => row.status === 'CERTIFIED' && !input.docker ? { ...row, status: 'PASSED_LOCAL' as const, certified: false, reason: 'Docker absent : un succès local n’est pas une isolation certifiée.' } : row);
+}

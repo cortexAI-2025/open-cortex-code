@@ -5,6 +5,8 @@ import { isSensitivePath } from '../security.js';
 import { AdvancedError, type Context, confirmed, hash, id, now, owned, param, project, readSafe, redact, route, trusted, writeSafe } from './common.js';
 import { normalizeClaimPath, type FileClaim } from './conflicts.js';
 import { storeMission, type Mission, type RepairAttempt } from './mission.js';
+import { authorizeOperation } from './mission-integrity.js';
+import { git } from './process.js';
 import { runCommand } from './process.js';
 
 const TEST_PATH = /(?:^|\/)(?:__tests__|tests?|specs?)\/|(?:\.(?:test|spec))\.[A-Za-z0-9]+$/u;
@@ -136,6 +138,15 @@ export async function runRepairLoop(ctx: Context, p: Project, missionId: string,
     if (reason) {
       recordFailure(reason === 'test-tamper' ? 'test-tamper' : 'scope', [patch.path]);
       break;
+    }
+    if (ctx.store.get('mission-contracts', missionId)) {
+      const shown = await git(p, ['branch', '--show-current']);
+      const branchName = shown.exitCode === 0 && !shown.timedOut && !shown.truncated ? shown.output.trim() : '';
+      const gate = authorizeOperation(ctx, p, missionId, { source: 'agent', action: 'write', paths: [patch.path], branch: branchName, repository: p.path });
+      if (!gate.allowed) {
+        recordFailure('scope', [patch.path]);
+        break;
+      }
     }
     const current = await readSafe(p, patch.path);
     const text = current?.toString('utf8') ?? '';
