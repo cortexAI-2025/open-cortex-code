@@ -19,6 +19,7 @@ import { registerIntegrityRoutes } from './advanced/mission-integrity.js';
 import { registerSandboxRoutes } from './advanced/external-runner.js';
 import { registerWorktreeClaimRoutes } from './advanced/worktree-claims.js';
 import { registerCtoBridgeRoutes } from './advanced/cto-bridge.js';
+import { registerCtoHumanRoutes } from './advanced/cto-human.js';
 
 export { shutdownAdvanced } from './advanced/automations.js';
 
@@ -42,5 +43,6 @@ export function registerAdvancedRoutes(app: Express, ctx: ConnectorContext): voi
   registerSandboxRoutes(app, ctx);
   registerWorktreeClaimRoutes(app, ctx);
   registerCtoBridgeRoutes(app, ctx);
+  registerCtoHumanRoutes(app, ctx);
   registerAutomationRoutes(app, ctx);
 }

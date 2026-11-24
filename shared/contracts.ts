@@ -46,3 +46,26 @@ export interface CtoMissionView {
     pullRequestBody: string; corrections: number; reworkRounds: number;
   };
 }
+
+/** Délégation humaine (Payworker) pilotée par le CTO IA via le MCP AIWORKPAY. Le CTO ne peut ni valider ni payer. */
+export type HumanDelegationStatus = 'awaiting_approval' | 'submitting' | 'awaiting_payment' | 'open' | 'assigned' | 'in_progress' | 'delivered' | 'completed' | 'rejected' | 'expired' | 'canceled' | 'blocked';
+export interface HumanBrief { type: string; title: string; instructions: string; budget: number; currency: string; deadline: string; priority: string; location?: Record<string, string>; deliverables?: string[] }
+export interface HumanFlag { code: string; where: string }
+export interface HumanProofView { id: string; filename: string; mime_type: string; size_bytes: number | null; source: 'upload' | 'link'; virus_scan: string; stored: boolean; sha256: string | null; flags: HumanFlag[] }
+export interface HumanResultView { delivered_at: string | null; validated: boolean; note: string; data: unknown; proofs: HumanProofView[]; flags: HumanFlag[]; risk: 'none' | 'low' | 'high'; ingested_at: string; content_warning: string }
+export interface HumanDelegationView {
+  id: string; mission_id: string | null; status: HumanDelegationStatus; brief: HumanBrief; brief_hash: string; reference: string;
+  warnings: string[]; approval_expires_at: string; approval: null | { decision: string; by: string; at: string; note: string; brief_hash: string };
+  ledger: null | { status: 'reserved' | 'committed' | 'released'; amount: number; currency: string; at: string };
+  remote: null | { mission_id: string; already_existed: boolean; created_at: string };
+  payment_url?: string | null; payment_url_expires_at?: string | null;
+  last_error: null | { code: string; message: string; at: string }; result: HumanResultView | null;
+  review: null | { verdict: 'acceptable' | 'needs_changes' | 'rejected'; note: string; by: string; at: string };
+  created_at: string; updated_at: string;
+}
+export interface HumanStatusView {
+  enabled: boolean; disabled_reasons: string[]; currency?: string; ceilings?: { max_per_delegation: number; monthly_budget: number; max_per_day: number };
+  engaged?: { this_month: number; today: number }; remaining_this_month?: number; contract?: { ok: boolean | null; checked_at: string | null; problem: string | null };
+  delegations?: Record<string, number>; authority?: string;
+}
+export interface HumanOverview { status: HumanStatusView; delegations: HumanDelegationView[] }

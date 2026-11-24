@@ -45,7 +45,7 @@ function requireConfig(ctx: Context): CtoConfig {
 }
 
 /** Appel serveur à serveur. Les erreurs sont explicites et typées ; aucune réponse n'est inventée. */
-async function cto<T>(ctx: Context, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+export async function cto<T>(ctx: Context, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const cfg = requireConfig(ctx);
   let response: Response;
   try {
@@ -62,12 +62,15 @@ async function cto<T>(ctx: Context, method: 'GET' | 'POST', path: string, body?:
   const message = typeof json.error === 'string' ? json.error : `HTTP ${response.status}`;
   if (response.status === 403 && /read-only/iu.test(message)) throw new AdvancedError(403, 'CTO_READ_ONLY', 'Le jeton CTO configuré est en lecture seule : action refusée.');
   if (response.status === 401 || response.status === 403 && /token|unauthor/iu.test(message)) throw new AdvancedError(502, 'CTO_AUTH_FAILED', 'CTO IA : authentification serveur à serveur refusée. Vérifier CORTEX_CTO_TOKEN.');
-  if (response.status === 403) throw new AdvancedError(403, 'CTO_READ_ONLY', 'Le jeton CTO configuré est en lecture seule : action refusée.');
   if (response.status === 409 && json.status === 'BLOCKED') throw new AdvancedError(409, 'CTO_BLOCKED', message, { blocked: true });
   if (response.status === 404) throw new AdvancedError(404, 'CTO_NOT_FOUND', 'Mission introuvable côté CTO IA.');
   if (response.status === 429) throw new AdvancedError(429, 'CTO_RATE_LIMITED', 'CTO IA : trop de requêtes, réessayer plus tard.');
   if (response.status >= 500) throw new AdvancedError(502, 'CTO_ERROR', 'Erreur interne du CTO IA.');
-  throw new AdvancedError(response.status === 409 ? 409 : 400, 'CTO_REJECTED', message);
+  const extra: Record<string, unknown> = {};
+  if (typeof json.code === 'string') extra.ctoCode = json.code;
+  if (Array.isArray(json.problems)) extra.problems = json.problems.slice(0, 20).map((p) => String(p).slice(0, 300));
+  if (Array.isArray(json.reasons)) extra.reasons = json.reasons.slice(0, 20).map((p) => String(p).slice(0, 300));
+  throw new AdvancedError(response.status === 409 || response.status === 410 ? response.status : 400, 'CTO_REJECTED', message, extra);
 }
 
 // ------------------------------------------------------------------ vues
