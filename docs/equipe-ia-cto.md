@@ -61,3 +61,16 @@ CTO_DIR=/chemin/CTO-AI-AIWORKPAY scripts/team-up.sh /chemin/du/projet   # démar
 ```
 La configuration (`~/.opencortex/team.env`, mode 600) est créée au premier lancement avec un jeton généré localement ; elle persiste. Le CTO travaille sur le projet passé en argument,
 qui doit être ouvert dans Open Cortex. Preuve d'une exécution complète avec correction autonome : [certification-equipe-ia.md](certification-equipe-ia.md).
+
+## Délégation humaine (Payworkers) — API simulée uniquement
+
+L'espace Équipe IA contient la section « Délégation humaine (Payworkers) » : le propriétaire relit le **brief exact** qu'un Payworker lirait (avec son empreinte
+et les avertissements), l'approuve ou le refuse, paie lui-même la page Stripe, suit la mission, relit le résultat (affiché comme texte non fiable) et enregistre son avis.
+Le CTO IA est le seul client MCP ; Open Cortex ne détient aucun identifiant AIWORKPAY et n'expose **aucune** route qui valide un résultat ou paie. Conception, garanties
+et configuration : `docs/HUMAN_LOOP.md` du dépôt CTO-AI-AIWORKPAY.
+
+Routes : `GET /api/cto/human`, `POST /api/cto/human/delegations`, `GET …/:id`, `POST …/:id/approval|cancel|refresh|review` (toutes avec `confirm:true`, l'approbation
+exige l'empreinte du brief affiché).
+
+**État : validé uniquement contre une API simulée.** Aucune mission réelle, aucun paiement. Bout en bout dans Chromium (vrai CTO, vrai MCP en stdio, API simulée) :
+`CTO_DIR=… AIWORKPAY_MCP_DIR=… node scripts/e2e-human-loop.cjs` ; capture : `docs/pilot/delegation-humaine-simulee.png`.

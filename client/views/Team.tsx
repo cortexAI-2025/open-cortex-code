@@ -4,6 +4,7 @@ import type { CtoAgentInfo, CtoMissionLink, CtoMissionView, CtoTeam } from '../.
 import { dateLabel, projectRoute, useResource } from '../api';
 import { useAppActions, useConnection, useWorkspace } from '../state';
 import { Empty, ErrorBox, Field, Loading, SectionHeading } from '../components/ui';
+import { HumanDelegations } from '../components/HumanDelegations';
 
 const money = (value: number | undefined) => `${(value ?? 0).toFixed(3)} USD`;
 const connectionLabel: Record<CtoTeam['supervisor']['connection'], string> = { connected: 'CONNECTÉ', unreachable: 'INJOIGNABLE', unauthorized: 'JETON REFUSÉ', not_configured: 'NON CONFIGURÉ' };
@@ -154,5 +155,6 @@ export function Team() {
           <button className="primary" disabled={busy || !connected || blocked || readOnly || !project.trusted}><Play size={14}/>Transmettre au CTO IA</button>
           {!project.trusted && <p className="small">Le projet doit être explicitement approuvé.</p>}
         </form></section></div>}
+    <HumanDelegations/>
   </div>;
 }
